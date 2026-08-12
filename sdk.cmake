@@ -106,4 +106,4 @@ include_directories(
 )
 
 # extend CMAKE_C_FLAGS by common flags
-set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OPT} -Wall -Wextra")
+set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OPT} -Wall -Wextra -Werror")

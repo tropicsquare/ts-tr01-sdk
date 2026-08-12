@@ -54,6 +54,21 @@
 #define ARCH_READ_CSREG(reg, dest) \
     do {__asm__ volatile  ("csrr %0, " reg : "=r" (dest));} while(0)
 
+
+
+/**
+ * @brief Write the value to a RISC-V Control and Status Register (CSR).
+ *
+ * @param[in]  reg  The name or address of the CSR register (e.g., `mepc`, `mcause`, `mstatus`).
+ *                  This must be a string literal or a symbol recognized by the assembler.
+ * @param[out] val  The C variable (typically `u32`) where the value is stored.
+ *
+ * @warning The @p reg parameter cannot be passed as a standard dynamic C variable, 
+ *          as the assembly instruction requires the register name to be hardcoded.
+ */
+#define ARCH_WRITE_CSREG(reg, val) \
+    do {__asm__ volatile  ("csrw " reg ", %0" : : "r" (val));} while(0)
+
 /**
  * @brief  Hardened infinite loop macro.
  * 

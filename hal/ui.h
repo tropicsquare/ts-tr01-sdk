@@ -54,6 +54,28 @@ ts_bool ui_response_async_blocked(void);
 ts_bool ui_resend(void);
 
 /**
+ * @brief Read-and-clear the "a RESEND_REQ was just served" flag.
+ *
+ * Set by ui_resend() whenever it actually re-sends the stored response. The L3
+ * streaming task uses it to defer the next-chunk advance by one pass, so the
+ * pull of a re-sent chunk never triggers an immediate advance.
+ *
+ * @returns TS_TRUE if a resend was served since the last call.
+ */
+ts_bool ui_resend_served(void);
+
+/**
+ * @brief Tell the UI layer whether an L3 result stream is mid-flight.
+ *
+ * While active, a RESEND_REQ arms the async-retry block even if the last
+ * committed chunk has already been promoted, so the next-chunk commit is
+ * reliably deferred.
+ *
+ * @param[in] active TS_TRUE while streaming an L3 result, TS_FALSE otherwise.
+ */
+void ui_set_stream_active(ts_bool active);
+
+/**
  * @brief Check if receiving is idle.
  *
  * @returns TS_TRUE when no receiving in progress.

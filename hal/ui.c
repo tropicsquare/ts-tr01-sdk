@@ -18,7 +18,11 @@ static msg_t _msg_retry;
 /** @brief Last L2 chunk of L3 response buffer for RESEND_REQ support. */
 static msg_t _msg_retry_async;
 /** @brief Request for retry _msg_retry_async because it was not delivered. */
-static ts_bool _async_response_retry_needed; 
+static ts_bool _async_response_retry_needed;
+/** @brief Set when ui_resend() actually re-sent _msg_retry; consumed by cmd_l3. */
+static ts_bool _resend_served;
+/** @brief TS_TRUE while an L3 result stream is mid-flight (set by cmd_l3). */
+static ts_bool _stream_active;
 
 static ui_callback_t _rx_callback = NULL;
 
@@ -29,6 +33,8 @@ void ui_init(ui_callback_t callback)
     OS_SANITY_NULL(callback);
 
     _async_response_retry_needed = TS_FALSE;
+    _resend_served = TS_FALSE;
+    _stream_active = TS_FALSE;
     _rx_callback = callback;
     _msg_retry.hdr = TS_L2_CMD_NONE;
     _rx_buffer = msg_get_rx_buffer();
@@ -83,13 +89,31 @@ ts_bool ui_resend(void)
         return TS_FALSE;
     }
 
-    if (_msg_valid(&_msg_retry_async) == TS_TRUE)
+    if ((_msg_valid(&_msg_retry_async) == TS_TRUE) || (_stream_active == TS_TRUE))
     {   // we are in the middle of L3 response sending and RESEND_REQ happen
         // the L3 respone was not yet pulled from SPI buffer
-        // so we will need to retry last chunk later
+        // so we will need to retry last chunk later.
+        // NOTE: _stream_active covers the window after the last committed chunk
+        // was promoted (so _msg_retry_async is transiently invalid) but the
+        // stream is not finished - the block must still arm to defer the advance.
         _async_response_retry_needed = TS_TRUE;
     }
+    // remember that we re-sent the stored response; cmd_l3 defers the next-chunk
+    // advance by one pass so the pull of this re-sent chunk does not advance.
+    _resend_served = TS_TRUE;
     return (msg_tx_send(&_msg_retry));
+}
+
+ts_bool ui_resend_served(void)
+{
+    ts_bool served = _resend_served;
+    _resend_served = TS_FALSE;
+    return served;
+}
+
+void ui_set_stream_active(ts_bool active)
+{
+    _stream_active = active;
 }
 
 ts_bool ui_idle(void)

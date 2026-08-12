@@ -34,7 +34,9 @@
 static spi_rx_callback_t _rx_byte = NULL;
 static spi_tx_callback_t _tx_fetch_word = NULL;
 
-static bool _tx_fetch_done = false;
+// Shared between the SPI IRQ (irq_ss_handler) and the main loop (_tx_reset via
+// spi_tx_enable/spi_clear_response_queue); volatile so LTO cannot cache it. (ETR01FW-278)
+static volatile bool _tx_fetch_done = false;
 
 static void _watermark_reset(void)
 {   // set default watermark 

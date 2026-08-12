@@ -20,8 +20,18 @@ typedef enum {
 
 /**
  * @brief Enable bedrock and bedrock proxy clock needed for PTRNG function.
+ *
+ * Basic initialization to IP get working for tests.
  */
 void ptrng_init(void);
+
+/**
+ * @brief From application initialization 
+ *
+ * Does specific initialization to get it working in app.
+ * It expect all tests already passed during boot process and PTRNG is ready.
+ */
+void ptrng_init_app(void);
 
 /**
  * @brief Turn ON selected PTRNG and performs the initialization and startup procedure then turn off.

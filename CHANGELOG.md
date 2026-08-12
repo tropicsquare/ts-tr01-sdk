@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2026-07-08]
+
+### Added
+- `ui_resend_served()` and `ui_set_stream_active()` so the L3 streaming task can defer the next-chunk advance by one pass across a `RESEND_REQ`.
+
+### Fixed
+- `RESEND_REQ` during an L3 result stream could advance to the next chunk; the async-retry block now also arms while `_stream_active` is set (covering the window after the last committed chunk was promoted but the stream is not done).
+
 ## [2026-06-23]
 
 ### Fixed

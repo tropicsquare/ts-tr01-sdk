@@ -27,8 +27,10 @@ static msg_t _msg_rx;
 typedef struct {
     /** @brief Optimized to be able read by u32. */
     u32 data[_BUFFER_SIZE];
-    u32 ptr;
-    u32 len;
+    // ptr/len are shared between the SPI IRQ (_msg_tx_fetch_word) and the main loop
+    // (msg_tx_send/msg_tx_is_idle); volatile prevents LTO from caching/reordering them.
+    volatile u32 ptr;
+    volatile u32 len;
 } msg_tx_stream_t;
 
 /** @brief Buffer for response message raw data. */
@@ -45,7 +47,9 @@ typedef enum {
     RX_ERROR_LEN
 } rx_status_e;
 
-static int _rx_status = RX_IDLE;
+// Written by the SPI IRQ (_msg_rx_byte) and polled by the main loop (msg_rx_done/idle);
+// volatile so LTO cannot cache it across the polling loops. (ETR01FW-278)
+static volatile int _rx_status = RX_IDLE;
 
 static void _msg_rx_byte(u8 rx_byte)
 {   // rx callback called from SPI IRQ
@@ -170,6 +174,9 @@ ts_bool msg_rx_done(void)
         // check again receiving done, because it may happen just now
         // The delay between CS 0 -> 1 and IRQ REQQNETYS may be up to 4 clocks
         ARCH_NOP(); // add little delay to be sure _rx_status was updated
+        // "memory" clobber bars LTO from reordering/caching the _rx_status / _msg_rx
+        // reads across this point (ARCH_NOP is only a nop, not a barrier). (ETR01FW-278)
+        __asm__ volatile("" ::: "memory");
         if (_rx_status >= RX_DONE)
         {   // receiving done, OK or error
             return TS_TRUE;
@@ -241,6 +248,9 @@ ts_bool msg_tx_send(msg_t *msg)
         pdata[len++] = TS_L2_RESP_NO_RESP;
     }
     _tx_stream.len = len>>2; // convert length from bytes to words
+    // Ensure the data[] fill above is committed before the TX IRQ may fetch it. With LTO
+    // this barrier replaces the implicit cross-translation-unit ordering. (ETR01FW-278)
+    __asm__ volatile("" ::: "memory");
     spi_tx_enable();
 
     return TS_TRUE;
