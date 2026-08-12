@@ -100,6 +100,13 @@ typedef u8 spect_op_id_t;
 ts_bool spect_init(void);
 
 /**
+ * @brief Initialize scrambling as rubbish for SPECT.
+ *
+ * May be called before each command when continuous context is not needed.
+ */
+void spect_scramble(void);
+
+/**
  * @brief Enables clock for SPECT.
  */
 void spect_wakeup(void);
@@ -183,7 +190,13 @@ void spect_write_dram_in(u32 offset, const u8 *data, size_t len);
 void spect_write_fw(u32 offset, const u32 *data, size_t len);
 
 /**
- * @brief Wait for SPECT operation done.
+ * @brief Wait for SPECT operation done and dont mind the result.
+ * Uses default maximal timeout.
+ */
+ts_bool spect_wait_op_done(void);
+
+/**
+ * @brief Wait for SPECT operation done and check resul SPECT_OP_OK
  * Uses default maximal timeout.
  */
 ts_bool spect_wait_done(void);

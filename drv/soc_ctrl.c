@@ -20,7 +20,7 @@ static u32 _ss_int_en_bak;
 
 void soc_ctrl_init(void)
 {
-    // enable smitt triggers for inputs, they are disabled by default (reset value = 0)
+    // enable Schmitt triggers for inputs, they are disabled by default (reset value = 0)
     _SOC_CTRL_REG_WRITE(SOC_CTRL_PIN_SMT_ADDR, SOC_CTRL_PIN_SMT_SPI_SMT_MASK | SOC_CTRL_PIN_SMT_TPDI_SMT_MASK);
 
     // set drive strength for outputs, the default is lowest strength (reset value = 0)
@@ -38,12 +38,12 @@ void soc_ctrl_clk_dis(soc_ctrl_periph_clk_en_t peripherals)
     _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_EN_ADDR) &= ~peripherals;
 }
 
-void soc_ctrl_stealed_clk_en(soc_ctrl_periph_stealed_clk_t peripherals)
+void soc_ctrl_sclk_en(soc_ctrl_periph_sclk_t peripherals)
 {
     _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_SRC_ADDR) |= peripherals;
 }
 
-void soc_ctrl_stealed_clk_dis(soc_ctrl_periph_stealed_clk_t peripherals)
+void soc_ctrl_sclk_dis(soc_ctrl_periph_sclk_t peripherals)
 {
     _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_SRC_ADDR) &= ~peripherals;
 }
@@ -53,19 +53,19 @@ void soc_ctrl_clk_div(void)
     _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_CFG_ADDR) |= SOC_CTRL_CLK_CFG_CLKDIV_MASK;
 }
 
-void soc_ctrl_stealed_mac_and_d_clk_en(void)
+void soc_ctrl_sclk_mac_and_d_clk_en(void)
 {
-    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_SRC_ADDR) |= SOC_CTRL_STEALED_CLK_MAC_AND_D;
+    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_SRC_ADDR) |= SOC_CTRL_SCLK_MAC_AND_D;
 }
 
-void soc_ctrl_stealed_spect_clk_en(void)
+void soc_ctrl_sclk_spect_clk_en(void)
 {
-    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_SRC_ADDR) |= SOC_CTRL_STEALED_CLK_SPECT;
+    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_SRC_ADDR) |= SOC_CTRL_SCLK_SPECT;
 }
 
-void soc_ctrl_stealed_cpb_clk_en(void)
+void soc_ctrl_sclk_cpb_clk_en(void)
 {
-    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_SRC_ADDR) |= SOC_CTRL_STEALED_CLK_CPB;
+    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_SRC_ADDR) |= SOC_CTRL_SCLK_CPB;
 }
 
 void soc_ctrl_pwr_on(u32 bits)

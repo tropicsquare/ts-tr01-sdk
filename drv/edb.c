@@ -30,7 +30,29 @@ void edb_suspend(void)
     soc_ctrl_clk_dis(SOC_CTRL_CLK_EN_EDBCLKEN_MASK);
 }
 
-void edb_init(const edb_cfg_t *edb_cfg)
+void edb_init(void)
+{
+    u32 tmp;
+
+    edb_wakeup();
+
+    // Read current configuration
+    tmp = _EDB_REG_READ(EDB_CONFIG_ADDR);
+    
+    // Keep MODE as is (verification purposes)
+    // the mode is EDB_NORMAL_MODE after POR
+    tmp &= EDB_CONFIG_MODE_MASK;
+
+    tmp |= ( ( 0 << EDB_CONFIG_DBGWT_POS)
+           | (20 << EDB_CONFIG_KCKRNDS_POS)
+           | ( 8 << EDB_CONFIG_TRAWTH_POS)
+           | ( 4 << EDB_CONFIG_ENPYRNDS_POS)
+           | ( 4 << EDB_CONFIG_DMYRNDS_POS)
+    );
+    _EDB_REG_WRITE(EDB_CONFIG_ADDR, tmp);
+}
+
+void edb_init_cfg(const edb_cfg_t *edb_cfg)
 {
     u32 tmp;
 

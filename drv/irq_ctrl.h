@@ -21,7 +21,7 @@
 inline void __attribute__((always_inline)) cpu_enable_interrupt(u32 channel)
 {
     OS_SANITY_BIT32(channel);
-    cpu_set_bits_csr(CSR_MIE, 1 << channel);
+    cpu_set_bits_csr(CSR_MIE, 1U << channel);
 }
 
 /**
@@ -32,7 +32,7 @@ inline void __attribute__((always_inline)) cpu_enable_interrupt(u32 channel)
 inline void __attribute__((always_inline)) cpu_disable_interrupt(u32 channel)
 {
     OS_SANITY_BIT32(channel);
-    cpu_clear_bits_csr(CSR_MIE, 1 << channel);
+    cpu_clear_bits_csr(CSR_MIE, 1U << channel);
 }
 
 /**

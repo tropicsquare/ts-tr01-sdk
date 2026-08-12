@@ -43,7 +43,7 @@ void os_timer_init(void)
     timer_setup(TIMER_1, HW_CLOCK_MHZ, TIMER_CONTINUOUS_MODE, _TICKS_TO_MS-1);
     
     // enable interrupts on timer side
-    timer_irq_enable(TIMER_1, TIMER_OVERFLOW_INTERRUPT + TIMER_THRESHOLD_INTERRUPT);
+    timer_irq_enable(TIMER_1, TIMER_OVERFLOW_INTERRUPT | TIMER_THRESHOLD_INTERRUPT);
 
     timer_enable(TIMER_1);
 
@@ -93,7 +93,7 @@ void os_delay_cycles(u32 cycles)
 {
     while (cycles--)
     {
-        asm volatile("nop"); // to avoid optimization 
+        ARCH_NOP(); // to avoid optimization 
         // NOTE: 1ms corresponds to approx 6750 cycles in TROPIC01
     }
 }
@@ -179,13 +179,17 @@ void os_reset(void)
     // NOTE: pay attention to not switch clock off
 }
 
-__WEAK void os_alarm(void)
+__attribute__((noreturn)) __WEAK void os_alarm(void)
 {
     LOG_ERROR_NUM(_OS_ERR_ALARM);
+    // Default stub halts after logging; apps should override (must remain
+    // noreturn to honor the contract declared in os.h).
+    while (1) {}
 }
 
 __WEAK void os_alarm_isr(void)
 {
     LOG_ERROR_NUM(_OS_ERR_ALARM_ISR);
+    // NOTE: This is dummy function. Should be re-implemented in main app.
 }
 

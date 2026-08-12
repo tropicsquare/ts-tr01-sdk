@@ -58,9 +58,24 @@ u32 scramble_value(const u8 *sequence, size_t n)
     for (i=0; i<n; i++)
     {
         value <<= _SCRAMBLE_BIT_SIZE;
-        value |= (sequence[i] & _SCRAMBLE_BIT_MASK);
+        value |= (sequence[n-i-1] & _SCRAMBLE_BIT_MASK);
     }
     return (value);
 }
 
+u32 scramble_value_reversed(const u8 *sequence, size_t n)
+{   // build scrambling value from sequence of numbers in reversed order of nibbles
+    u32 value = 0;
+    size_t i;
+   
+    OS_SANITY_NULL(sequence);
+    OS_ASSERT(n <= _SCRAMBLE_WORD_NIBBLES);
+
+    for (i=0; i<n; i++)
+    {
+        value <<= _SCRAMBLE_BIT_SIZE;
+        value |= (sequence[i] & _SCRAMBLE_BIT_MASK);
+    }
+    return (value);
+}
 

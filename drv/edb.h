@@ -46,11 +46,19 @@ void edb_wakeup(void);
 void edb_suspend(void);
 
 /**
- * @brief Initializes Entropy distribution Block
+ * @brief Initializes Entropy distribution Block using default configuration
+ *
+ */
+void edb_init(void);
+
+/**
+ * @brief Initializes Entropy distribution Block using custom configuration.
+ *
+ * Alternative to edb_init() for specific purposes.
  *
  * @param edb_cfg Configuration of the block.
  */
-void edb_init(const edb_cfg_t *edb_cfg);
+void edb_init_cfg(const edb_cfg_t *edb_cfg);
 
 #endif // ! EDB_H
 

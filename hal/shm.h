@@ -78,6 +78,12 @@ void shm_write_no_crc(u32 offset, u32 value);
 void shm_update_crc(void);
 
 /**
+ * @brief Get last calculated value of SHM CRC (no recalculation is performed)
+ * @return CRC value
+ */
+u32 shm_get_crc(void);
+
+/**
  * @brief write one u32 value to shared memory and update CRC
  *
  * @param[in] value the value to write

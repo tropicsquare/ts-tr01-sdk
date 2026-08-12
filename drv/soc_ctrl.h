@@ -59,19 +59,19 @@ typedef u32 soc_ctrl_periph_clk_en_t;
 
 typedef enum {
 
-    SOC_CTRL_STEALED_CLK_MAC_AND_D = SOC_CTRL_CLK_SRC_MADCLKSRC_MASK,
-    SOC_CTRL_STEALED_CLK_SPECT     = SOC_CTRL_CLK_SRC_SPECTCLKSRC_MASK,
-    SOC_CTRL_STEALED_CLK_FSS       = SOC_CTRL_CLK_SRC_FSSCLKSRC_MASK,
-    SOC_CTRL_STEALED_CLK_KDB       = SOC_CTRL_CLK_SRC_KDBCLKSRC_MASK,
-    SOC_CTRL_STEALED_CLK_EDB       = SOC_CTRL_CLK_SRC_EDBCLKSRC_MASK,
-    SOC_CTRL_STEALED_CLK_SCB       = SOC_CTRL_CLK_SRC_SCBCLKSRC_MASK,
-    SOC_CTRL_STEALED_CLK_CPB       = SOC_CTRL_CLK_SRC_CPBCLKSRC_MASK
-} soc_ctrl_periph_stealed_clk_e;
+    SOC_CTRL_SCLK_MAC_AND_D = SOC_CTRL_CLK_SRC_MADCLKSRC_MASK,
+    SOC_CTRL_SCLK_SPECT     = SOC_CTRL_CLK_SRC_SPECTCLKSRC_MASK,
+    SOC_CTRL_SCLK_FSS       = SOC_CTRL_CLK_SRC_FSSCLKSRC_MASK,
+    SOC_CTRL_SCLK_KDB       = SOC_CTRL_CLK_SRC_KDBCLKSRC_MASK,
+    SOC_CTRL_SCLK_EDB       = SOC_CTRL_CLK_SRC_EDBCLKSRC_MASK,
+    SOC_CTRL_SCLK_SCB       = SOC_CTRL_CLK_SRC_SCBCLKSRC_MASK,
+    SOC_CTRL_SCLK_CPB       = SOC_CTRL_CLK_SRC_CPBCLKSRC_MASK
+} soc_ctrl_periph_sclk_e;
 
 /**
- * Type for multiple soc_ctrl_periph_stealed_clk_e selection.
+ * Type for multiple soc_ctrl_periph_sclk_e selection.
  */
-typedef u32 soc_ctrl_periph_stealed_clk_t;
+typedef u32 soc_ctrl_periph_sclk_t;
 
 /**
  * System wide basic setup.
@@ -91,17 +91,17 @@ void soc_ctrl_clk_en (soc_ctrl_periph_clk_en_t peripherals);
 void soc_ctrl_clk_dis(soc_ctrl_periph_clk_en_t peripherals);
 #define soc_ctrl_clk_off soc_ctrl_clk_dis // backward compatibility define, to be removed 
 /**
- * Enable stealed clocks for supported peripherals.
+ * Enable secure clocks for supported peripherals.
  *
  * @param[in] peripherals target peripheral
  *
- * @note When enabling stealed clocks of multiple peripherals,
+ * @note When enabling secure clocks of multiple peripherals,
  *       please use the bitwise OR "|" instead of the + operator.
  */
-void soc_ctrl_stealed_clk_en (soc_ctrl_periph_stealed_clk_t peripherals);
+void soc_ctrl_sclk_en (soc_ctrl_periph_sclk_t peripherals);
 
-void soc_ctrl_stealed_clk_dis(soc_ctrl_periph_stealed_clk_t peripherals);
-#define soc_ctrl_stealed_clk_off soc_ctrl_stealed_clk_dis // backward compatibility define, to be removed
+void soc_ctrl_sclk_dis(soc_ctrl_periph_sclk_t peripherals);
+#define soc_ctrl_sclk_off soc_ctrl_sclk_dis // backward compatibility define, to be removed
 
 /**
  * Divide clock by two.
@@ -109,14 +109,14 @@ void soc_ctrl_stealed_clk_dis(soc_ctrl_periph_stealed_clk_t peripherals);
 void soc_ctrl_clk_div(void);
 
 /**
- * @name Enable stealed clocks for supported peripherals
+ * @name Enable secure clocks for supported peripherals
  */
 ///@{
-void soc_ctrl_stealed_mac_and_d_clk_en (void);
+void soc_ctrl_sclk_mac_and_d_clk_en (void);
 
-void soc_ctrl_stealed_spect_clk_en (void);
+void soc_ctrl_sclk_spect_clk_en (void);
 
-void soc_ctrl_stealed_cpb_clk_en (void);
+void soc_ctrl_sclk_cpb_clk_en (void);
 ///@}
 
 /**

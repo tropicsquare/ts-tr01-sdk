@@ -19,7 +19,7 @@
 #define _MBIST_REG_WRITE(offset,value)      IO_WRITE_32(TROPIC01_MEMORY_MAP_MBIST_BASE_ADDR+(offset), value)
 
 
-static ts_bool command_in_progress;
+static volatile ts_bool command_in_progress;
 
 static inline void _mbist_reset(void)
 {

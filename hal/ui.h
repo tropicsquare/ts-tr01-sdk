@@ -61,6 +61,12 @@ ts_bool ui_resend(void);
 ts_bool ui_idle(void);
 
 /**
+ * @brief Check if all communication is done.
+ * @returns TS_TRUE when no receiving or transmitting in progress.
+ */
+ts_bool ui_done(void);
+
+/**
  * @brief Main module task which has to be called regularly.
  */
 void ui_task(void);

@@ -42,6 +42,16 @@ void scramble_shuffle(u8 *sequence, size_t n, const u8 *seed);
  */
 u32 scramble_value(const u8 *sequence, size_t n);
 
+/**
+ * @brief Get the final scrambling value in reversed order of nibbles.
+ *
+ * This is backward compatibility implementation. 
+ *
+ * @param[in] sequence Reordered row of bytes for scrambling setup.
+ * @param[in] n Number of valid items in sequence (bytes).
+ * @return The value suitable for register content.
+ */
+u32 scramble_value_reversed(const u8 *sequence, size_t n);
 
 #endif // ! SCRAMBLE_H
 

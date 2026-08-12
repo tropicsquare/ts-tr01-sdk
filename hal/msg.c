@@ -169,7 +169,7 @@ ts_bool msg_rx_done(void)
     {   // SPI transaction done (CS is UP)
         // check again receiving done, because it may happen just now
         // The delay between CS 0 -> 1 and IRQ REQQNETYS may be up to 4 clocks
-        asm volatile("nop"); // add little delay to be sure _rx_status was updated
+        ARCH_NOP(); // add little delay to be sure _rx_status was updated
         if (_rx_status >= RX_DONE)
         {   // receiving done, OK or error
             return TS_TRUE;

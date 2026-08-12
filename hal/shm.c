@@ -70,6 +70,12 @@ void shm_update_crc(void)
     _shm_crc_value = _shm_crc();
 }
 
+u32 shm_get_crc(void)
+{
+    return _shm_crc_value;
+
+}
+
 ts_bool shm_set(u32 offset, u32 value)
 {
     if (_offset_valid(offset) != TS_TRUE)

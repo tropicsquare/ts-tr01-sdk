@@ -19,8 +19,8 @@ enum SHIELD_REGS {
 
 /* SHIELD_CTRL registers */
 
-#define SHIELD_CTRL_RCS_ENA_MASK GENMASK(1, 0)
-#define SHIELD_CTRL_RCS_ENA_POS 0
+#define SHIELD_CTRL_SCLK_ENA_MASK GENMASK(1, 0)
+#define SHIELD_CTRL_SCLK_ENA_POS 0
 
 
 /* SHIELD_CFG registers */

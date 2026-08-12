@@ -22,7 +22,7 @@ LOG_DEF("MAD");
 
 #define _LOG_DEBUG(...) // LOG_DEBUG(__VA_ARGS__)
 
-// max time for MACANDD operation is about 5ms without clock stealer
+// max time for MACANDD operation is about 5ms without secure clock
 #define _MAD_TIMEOUT_MAX (20 * 1000) // [us]
 
 static ts_bool _condition_op_done(void)

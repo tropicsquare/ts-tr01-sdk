@@ -57,6 +57,14 @@ ts_bool spi_response_queue_empty(void);
 void spi_clear_response_queue(void);
 
 /**
+ * @brief Discard any request bytes the SS latched in the request FIFO.
+ *
+ * Drains the request queue without resetting the serial subsystem, so requests
+ * received before the interface is READY are dropped (not processed once READY).
+ */
+void spi_flush_request_queue(void);
+
+/**
  * @brief Enable TX fifo fetching and clear busy flag.
  */
 void spi_tx_enable(void);
@@ -65,6 +73,13 @@ void spi_tx_enable(void);
  * @brief Disable RX fifo fetching. Usually in alarm mode.
  */
 void spi_rx_disable(void);
+
+/**
+ * @brief Direct write to TX FIFO.
+ *
+ * @param w 32bit word to write
+ */
+void spi_tx_push(u32 w);
 
 /**
  * @brief Modify the chip status value.

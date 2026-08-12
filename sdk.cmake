@@ -90,6 +90,7 @@ add_definitions(
 
 project (${SDK_TARGET} C ASM)
 add_library(${SDK_TARGET} STATIC)
+target_compile_options(${SDK_TARGET} PRIVATE -flto)
 
 ADD_SUBDIRECTORY(${DIR_SDK_COMMON} sdk_build/common)
 ADD_SUBDIRECTORY(${DIR_SDK_HAL} sdk_build/hal)

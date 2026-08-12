@@ -11,6 +11,8 @@
 #include "io_ops.h"
 #include "os.h"
 #include "log.h"
+#include "secclk.h"
+
 
 #include "tassic_defs.h"
 #include "sec_cntr_regs.h"
@@ -39,6 +41,11 @@ LOG_DEF("SCNTR");
 #define _PROVISION_CTRL_SEQ2  (0xCAFE4FEE)
 #define _PROVISION_CTRL_SEQ3  (0x00BA0BAB)
 
+/** @brief Mask of already enabled sensors */
+static u64 _sensors_enabled;
+
+/** @brief Mask of sensors caused memory */
+static u64 _alarm_memory;
 
 /**
  * @brief Configure shield IP as in Shield specification.
@@ -49,7 +56,7 @@ LOG_DEF("SCNTR");
 static void _shield_init(void)
 {
     // Enable the IPs
-    u32 ctrl = FIELD_PREP(SHIELD_CTRL_RCS_ENA_MASK, 0x2);
+    u32 ctrl = FIELD_PREP(SHIELD_CTRL_SCLK_ENA_MASK, 0x2);
     _SHIELD_REG_WRITE(_SHLD1, SHIELD_CTRL_ADDR, ctrl);
     _SHIELD_REG_WRITE(_SHLD2, SHIELD_CTRL_ADDR, ctrl);
 
@@ -63,17 +70,49 @@ static void _shield_init(void)
 
 static void sec_cntr_configure_unmask(u64 unmask)
 {
-    u32 low = unmask;
+    u32 low = (u32)unmask;
     u32 high = unmask >> 32;
 
     _SEC_CNTR_REG_WRITE(SEC_CNTR_ALARM_UNMASK_1_ADDR, low);
     _SEC_CNTR_REG_WRITE(SEC_CNTR_ALARM_UNMASK_2_ADDR, high);
 }
 
-void sec_cntr_configure_interrupts(u64 int_en)
+static void _sec_cntr_assert_configured(void)
+{   // Do some basic check that sensors are enabled and configuration match expectation.
+    // We expect all sensors enabled since sec_cntr_init()
+    u32 tmp =
+        FIELD_PREP(SEC_CNTR_CONFIG_MON_VCC_ENA_MASK,            0x1)    |
+        FIELD_PREP(SEC_CNTR_CONFIG_TS_ENA_MASK,                 0x1)    |
+        FIELD_PREP(SEC_CNTR_CONFIG_LD_RESET_N_MASK,             0x1)    |
+        FIELD_PREP(SEC_CNTR_CONFIG_LD_SET_N_MASK,               0x1)    |
+        FIELD_PREP(SEC_CNTR_CONFIG_EMPD_SET_N_MASK,             0x1)    |
+        FIELD_PREP(SEC_CNTR_CONFIG_EMPD_BAD_INIT_DATA_MASK,     0x1)    |
+        FIELD_PREP(SEC_CNTR_CONFIG_PTRNG0_RED_EN_MASK,          0x1)    |
+        FIELD_PREP(SEC_CNTR_CONFIG_PTRNG1_RED_EN_MASK,          0x1)    |
+        FIELD_PREP(SEC_CNTR_CONFIG_SHIELD_RED_EN_MASK,          0x1);
+
+  #define CONFIG_CHECK_MASK ~(SEC_CNTR_CONFIG_GPEN_MASK | SEC_CNTR_CONFIG_PES_MASK)
+    OS_ASSERT((_SEC_CNTR_REG_READ(SEC_CNTR_CONFIG_ADDR) & CONFIG_CHECK_MASK) == tmp);
+
+    u64 channels;
+
+    channels =  _SEC_CNTR_REG_READ(SEC_CNTR_ALARM_UNMASK_2_ADDR);
+    channels <<= 32;
+    channels += _SEC_CNTR_REG_READ(SEC_CNTR_ALARM_UNMASK_1_ADDR);
+
+    OS_ASSERT(channels == _sensors_enabled);
+
+    channels = _SEC_CNTR_REG_READ(SEC_CNTR_INT_ENA_A_2_ADDR);
+    channels <<= 32;
+    channels += _SEC_CNTR_REG_READ(SEC_CNTR_INT_ENA_A_1_ADDR);
+
+    OS_ASSERT(channels == _sensors_enabled);
+}
+
+void sec_cntr_configure_interrupts(u64 channels)
 {
-    u32 low = int_en;
-    u32 high = int_en >> 32;
+    u32 low = (u32)channels;
+    u32 high = channels >> 32;
 
     _SEC_CNTR_REG_WRITE(SEC_CNTR_INT_ENA_A_1_ADDR, low);
     _SEC_CNTR_REG_WRITE(SEC_CNTR_INT_ENA_A_2_ADDR, high);
@@ -99,6 +138,9 @@ void sec_cntr_init(const sec_cntr_config_t *config)
     //      - Reset Laser detector
     //      - Reset EM Pulse detector
     //      - Enable redundancy on TRNG0,1 and shield
+    //
+    // NOTE: Secure clock frequency monitor is enabled in secclk_trim() function
+
     u32 tmp =
         FIELD_PREP(SEC_CNTR_CONFIG_MON_VCC_ENA_MASK,            0x1)    |
         FIELD_PREP(SEC_CNTR_CONFIG_TS_ENA_MASK,                 0x1)    |
@@ -139,32 +181,63 @@ void sec_cntr_init(const sec_cntr_config_t *config)
     sec_cntr_clr_alarms(alm_clr);
 
     // Configure resets
-    u32 low = config->rst_en;
+    u32 low = (u32)config->rst_en;
     u32 high = config->rst_en >> 32;
     _SEC_CNTR_REG_WRITE(SEC_CNTR_ALARM_RST_EN_1_ADDR, low);
     _SEC_CNTR_REG_WRITE(SEC_CNTR_ALARM_RST_EN_2_ADDR, high);
 
-    low = config->rst_mask;
+    low = (u32)config->rst_mask;
     _SEC_CNTR_REG_WRITE(SEC_CNTR_ALARM_RST_MASK_ADDR, low);
 
     // Configure MBIST
-    low = config->mbist_en;
+    low = (u32)config->mbist_en;
     high = config->mbist_en >> 32;
     _SEC_CNTR_REG_WRITE(SEC_CNTR_ALARM_MBIST_EN_1_ADDR, low);
     _SEC_CNTR_REG_WRITE(SEC_CNTR_ALARM_MBIST_EN_2_ADDR, high);
     _SEC_CNTR_REG_WRITE(SEC_CNTR_ALARM_MBIST_CHANNELS_ADDR, config->mbist_channels);
 
-    // Enable alarm interrupts and allow sensors to fire alarm channel
-    sec_cntr_configure_interrupts(config->int_en);
-    sec_cntr_configure_unmask(config->int_en);
-
     // Configure refresh wait time
     _SEC_CNTR_REG_WRITE(SEC_CNTR_REFRESH_WAIT_TIME_ADDR, config->refresh_wait_time);
 
     // Configure precharge
-    _SEC_CNTR_REG_WRITE(SEC_CNTR_PRECHARGE_EN_ADDR, config->precharge_en);
-    _SEC_CNTR_REG_WRITE(SEC_CNTR_PRECHARGE_PRESCALER_ADDR, config->precharge_prescaler);
+    sec_cntr_precharge_en(config->precharge_en, config->precharge_prescaler ,SEC_CNTR_PRECHARGE_SRC_PTRNG0_ARB);
+
+    // Enable selected sensors
+    sec_cntr_configure_interrupts(config->int_en);
+    sec_cntr_configure_unmask(config->int_en);
+
+    _sensors_enabled = config->int_en;
+
+    // re-check config written
+    _sec_cntr_assert_configured();
 }
+
+void sec_cntr_init_app(void)
+{
+    u64 channels;
+
+    channels =  _SEC_CNTR_REG_READ(SEC_CNTR_ALARM_UNMASK_2_ADDR);
+    channels <<= 32;
+    channels += _SEC_CNTR_REG_READ(SEC_CNTR_ALARM_UNMASK_1_ADDR);
+
+    _sensors_enabled = channels;
+
+    _sec_cntr_assert_configured();
+}
+
+void sec_cntr_set_active_sensors(u64 channels)
+{
+    _sec_cntr_assert_configured();
+
+    // clear alarm of newly enabled sensors if present
+    sec_cntr_clr_alarms(channels & ~_sensors_enabled);
+    _sensors_enabled = channels;
+
+    // Enable alarm interrupts and allow sensors to fire alarm channel
+    sec_cntr_configure_interrupts(channels);
+    sec_cntr_configure_unmask(channels);
+}
+
 
 void sec_cntr_wakeup(void)
 {
@@ -191,31 +264,47 @@ void sec_cntr_suspend(void)
 
 void sec_cntr_clr_alarms(u64 channels)
 {
-    // Always clear sources of alarms that are persistent!
-    // If such alarms are inactive, this has no effect.
-    // Otherwise it needs to be cleared or active alarm channels would be set again.
     u32 tmp = _SEC_CNTR_REG_READ(SEC_CNTR_CONFIG_ADDR);
+   
+    if (channels & (SEC_CNTR_ALM_CHNL_SECURE_CLOCK_SOURCE))
+    {   // specific sensor, which is part of different block
+        secclk_fm_reset();
+    }
+    if (channels & (SEC_CNTR_ALM_CHNL_GLITCH_DET_NEGATIVE | SEC_CNTR_ALM_CHNL_GLITCH_DET_NEGATIVE_N
+                    | SEC_CNTR_ALM_CHNL_GLITCH_DET_POSITIVE | SEC_CNTR_ALM_CHNL_GLITCH_DET_POSITIVE_N))
+    {
+        FIELD_SET(tmp, SEC_CNTR_CONFIG_GD_VCC_CLEAR_MASK, 0x1);
+    }
+    if (channels & (SEC_CNTR_ALM_CHNL_TEMP_SENS_HIGH | SEC_CNTR_ALM_CHNL_TEMP_SENS_HIGH_N
+                    | SEC_CNTR_ALM_CHNL_TEMP_SENS_LOW | SEC_CNTR_ALM_CHNL_TEMP_SENS_LOW_N))
+    {
+        FIELD_SET(tmp, SEC_CNTR_CONFIG_TS_CLEAR_HIGH_MASK, 0x1);
+        FIELD_SET(tmp, SEC_CNTR_CONFIG_TS_CLEAR_LOW_MASK,  0x1);
+    }
+    if (channels & (SEC_CNTR_ALM_CHNL_LASER_DETECTOR))
+    {
+        FIELD_SET(tmp, SEC_CNTR_CONFIG_LD_RESET_N_MASK, 0x0);
+    }
+    if (channels & (SEC_CNTR_ALM_CHNL_EM_PULSE_DETECTOR))
+    {
+        FIELD_SET(tmp, SEC_CNTR_CONFIG_EMPD_INIT_ENA_MASK,      0x1);
+        FIELD_SET(tmp, SEC_CNTR_CONFIG_EMPD_BAD_INIT_DATA_MASK, 0x0);
+    }
 
-    FIELD_SET(tmp, SEC_CNTR_CONFIG_GD_VCC_CLEAR_MASK,           0x1);
-    FIELD_SET(tmp, SEC_CNTR_CONFIG_TS_CLEAR_HIGH_MASK,          0x1);
-    FIELD_SET(tmp, SEC_CNTR_CONFIG_TS_CLEAR_LOW_MASK,           0x1);
-    FIELD_SET(tmp, SEC_CNTR_CONFIG_LD_RESET_N_MASK,             0x0);
-    FIELD_SET(tmp, SEC_CNTR_CONFIG_EMPD_INIT_ENA_MASK,          0x1);
-    FIELD_SET(tmp, SEC_CNTR_CONFIG_EMPD_BAD_INIT_DATA_MASK,     0x0);
     _SEC_CNTR_REG_WRITE(SEC_CNTR_CONFIG_ADDR, tmp);
 
     os_delay_us(1);
 
-    FIELD_SET(tmp, SEC_CNTR_CONFIG_GD_VCC_CLEAR_MASK,           0x0);
-    FIELD_SET(tmp, SEC_CNTR_CONFIG_TS_CLEAR_HIGH_MASK,          0x0);
-    FIELD_SET(tmp, SEC_CNTR_CONFIG_TS_CLEAR_LOW_MASK,           0x0);
-    FIELD_SET(tmp, SEC_CNTR_CONFIG_LD_RESET_N_MASK,             0x1);
-    FIELD_SET(tmp, SEC_CNTR_CONFIG_EMPD_INIT_ENA_MASK,          0x0);
+    FIELD_SET(tmp, SEC_CNTR_CONFIG_GD_VCC_CLEAR_MASK,  0x0);
+    FIELD_SET(tmp, SEC_CNTR_CONFIG_TS_CLEAR_HIGH_MASK, 0x0);
+    FIELD_SET(tmp, SEC_CNTR_CONFIG_TS_CLEAR_LOW_MASK,  0x0);
+    FIELD_SET(tmp, SEC_CNTR_CONFIG_LD_RESET_N_MASK,    0x1);
+    FIELD_SET(tmp, SEC_CNTR_CONFIG_EMPD_INIT_ENA_MASK, 0x0);
     _SEC_CNTR_REG_WRITE(SEC_CNTR_CONFIG_ADDR, tmp);
 
     os_delay_us(1);
 
-    FIELD_SET(tmp, SEC_CNTR_CONFIG_EMPD_BAD_INIT_DATA_MASK,     0x1);
+    FIELD_SET(tmp, SEC_CNTR_CONFIG_EMPD_BAD_INIT_DATA_MASK, 0x1);
     _SEC_CNTR_REG_WRITE(SEC_CNTR_CONFIG_ADDR, tmp);
 
     // Clear the shield alarm status.
@@ -239,12 +328,22 @@ void sec_cntr_set_alarms(u64 channels)
     _SEC_CNTR_REG_WRITE(SEC_CNTR_ALARM_SW_SET_2_ADDR, high);
 }
 
+u64 sec_cntr_get_alarm_memory(void)
+{
+    return _alarm_memory;
+}
+
 u64 sec_cntr_get_alarms(void)
 {
     u32 low = _SEC_CNTR_REG_READ(SEC_CNTR_ALARM_STATUS_1_ADDR);
     u32 high = _SEC_CNTR_REG_READ(SEC_CNTR_ALARM_STATUS_2_ADDR);
 
     return (((u64)high) << 32) | ((u64)low);
+}
+
+u64 sec_cntr_get_active_alarms(void)
+{
+    return (sec_cntr_get_alarms() & _sensors_enabled);
 }
 
 sec_cntr_life_cycle_state_t sec_cntr_lc_read(void)
@@ -275,10 +374,10 @@ void sec_cntr_precharge_en(u32 periphs, u32 prescaler, sec_cntr_precharge_src_e 
 {
     _SEC_CNTR_REG_WRITE(SEC_CNTR_PRECHARGE_EN_ADDR, periphs);
     _SEC_CNTR_REG_WRITE(SEC_CNTR_PRECHARGE_PRESCALER_ADDR, prescaler);
-    _SEC_CNTR_REG_WRITE(SEC_CNTR_PRECHARGE_PRESCALER_ADDR, prescaler);
 
     u32 tmp = _SEC_CNTR_REG_READ(SEC_CNTR_CONFIG_ADDR);
-    FIELD_SET(tmp, SEC_CNTR_CONFIG_GPEN_MASK, 1);
+    // enable/disable global enable flag according to periphery usage
+    FIELD_SET(tmp, SEC_CNTR_CONFIG_GPEN_MASK, periphs ? 1 : 0);
     FIELD_SET(tmp, SEC_CNTR_CONFIG_PES_MASK, precharge_src);
     _SEC_CNTR_REG_WRITE(SEC_CNTR_CONFIG_ADDR, tmp);
 }
@@ -291,14 +390,24 @@ void process_alarms(void)
 
     // Clear active alarm
     u64 active_alarms = sec_cntr_get_alarms();
-    LOG_DEBUG("ALARM CHANNELS: %x %x", (u32)(active_alarms>>32), (u32)active_alarms);
-    sec_cntr_clr_alarms(active_alarms);
+    
+    _alarm_memory |= active_alarms;
+
+    LOG_WARNING("ALARM CHANNELS: %x %x", (u32)(active_alarms>>32), (u32)active_alarms);
+    
+    // We dont want to sec_cntr_clr_alarms(active_alarms) here
+    // its better to keep the info in registers (IRQ is already off to avoid dead-loop)
 }
 
 
 __ISR void irq_sc_handler(void)
-{   // one IRQ handler for all of irq_sc_a irq_sc_b irq_sc_c to spare some code memory
+{   // One IRQ handler for all of irq_sc_a irq_sc_b irq_sc_c to spare some code memory.
+    //
+    // NOTE: This routine will be called always three times, because of parallel IRQ requests.
+    //       It does not matter the IRQ is going to be disabled. The 3 IRQ request are already pending.
+    
     process_alarms();
     os_alarm_isr();
+
 }
 

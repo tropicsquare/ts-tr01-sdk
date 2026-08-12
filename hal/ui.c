@@ -40,7 +40,6 @@ void ui_response(msg_t *msg)
 {
     OS_SANITY_NULL(msg);
 
-    _msg_retry_async.hdr = TS_L2_CMD_NONE;
     memcpy(&_msg_retry, msg, sizeof(_msg_retry));
     msg_tx_send(msg);
 }
@@ -55,6 +54,8 @@ static void _update_retry_msg(void)
     if (_msg_valid(&_msg_retry_async) == TS_TRUE)
     {
         memcpy(&_msg_retry, &_msg_retry_async, sizeof(_msg_retry));
+        // make _msg_retry_async invalid, because now we have copy already in _msg_retry
+        _msg_retry_async.hdr = TS_L2_CMD_NONE;
     }
 }
 
@@ -81,8 +82,10 @@ ts_bool ui_resend(void)
     {
         return TS_FALSE;
     }
+
     if (_msg_valid(&_msg_retry_async) == TS_TRUE)
     {   // we are in the middle of L3 response sending and RESEND_REQ happen
+        // the L3 respone was not yet pulled from SPI buffer
         // so we will need to retry last chunk later
         _async_response_retry_needed = TS_TRUE;
     }
@@ -96,6 +99,37 @@ ts_bool ui_idle(void)
         return TS_FALSE;
     }
     return TS_TRUE;
+}
+
+static ts_bool _resend_sync(void)
+{   // the repeated message needs to by updated according to current state
+    // in case we damaged L3 response by RESEND_REQ, we need to retry
+    if ((msg_tx_is_idle() == TS_TRUE) && (msg_rx_idle() == TS_TRUE))
+    {   // last response was pulled, so we can resend asynchronous L3 chunk if needed
+        if (_async_response_retry_needed == TS_TRUE)
+        {
+            // to be sure, re-check validity even if it should be OK 
+            if (_msg_valid(&_msg_retry_async) == TS_TRUE)
+            {
+                msg_tx_send(&_msg_retry_async);
+            }
+            _async_response_retry_needed = TS_FALSE;
+        }
+        else
+        {
+            _update_retry_msg();
+            // here is the RESEND_REQ management done so return true 
+            // which may be used as "done for sleep"
+            return (TS_TRUE);
+        }
+    }
+    return (TS_FALSE);
+}
+
+ts_bool ui_done(void)
+{
+    // for "all done" signalization we re-use suitable function
+    return (_resend_sync());
 }
 
 void ui_task(void)
@@ -132,21 +166,7 @@ void ui_task(void)
         msg_rx_reset();
     }
 
-#if DISABLE_L3 != 1    
-    // in case we damaged L3 response by RESEND_REQ, we need to retry
-    if ((msg_tx_is_idle() == TS_TRUE) && (msg_rx_idle() == TS_TRUE))
-    {
-        if (_async_response_retry_needed == TS_TRUE)
-        {
-            if (msg_tx_send(&_msg_retry_async) == TS_TRUE)
-            {
-                _async_response_retry_needed = TS_FALSE;
-            }
-        }
-        else
-        {
-            _update_retry_msg();
-        }
-    }
+#if DISABLE_L3 != 1   
+    _resend_sync();
 #endif // DISABLE_L3 != 1 
 }

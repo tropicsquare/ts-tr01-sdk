@@ -87,5 +87,13 @@ void log_dump(const ascii *id, const ascii *text, const u8 *data, size_t data_le
     OS_FLUSH();
 }
 
-#endif // LOG_LEVEL > LOG_LEVEL_NONE
+#else //  LOG_LEVEL > LOG_LEVEL_NONE
+
+void log_err_num(const ascii *id, u32 num)
+{
+    (void)id;
+    (void)num;
+}
+
+#endif // LOG_LEVEL == LOG_LEVEL_NONE
 

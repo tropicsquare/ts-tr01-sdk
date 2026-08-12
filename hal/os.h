@@ -10,6 +10,7 @@
 #define OS_H
 
 #include "type.h"
+#include "arch.h"
 #include "xprintf.h"
 
 #define OS_PRINTF( ... ) xprintf(__VA_ARGS__)
@@ -39,6 +40,26 @@ void os_print_msg(ascii *text);
 #define __ALIGN_U32 __attribute__((aligned(sizeof(u32))))
 ///@}
 
+
+#define OS_FORCE_READ(var) ((void)(*(volatile __typeof__(var) *)&(var)))
+
+/**
+ * @brief Triggers a system-level alarm if a != b.
+ *
+ * This macro evaluates a condition a == b and calls @c os_alarm() if the condition fails.
+ * Typically used for critical assertion checks in the OS layer.
+ * The macro is using OPAQUE to prevent optimization, in case the compiler sees the
+ * condition as tautology.
+ *
+ * @param a
+ * @param b
+ */
+#define OS_ASSERT_EQUAL(a, b) \
+    do { \
+        ARCH_OPAQUE(a); \
+        ARCH_OPAQUE(b); \
+        OS_ASSERT(a == b) \
+    } while(0)
 
 /**
  * @brief Triggers a system-level alarm if the given condition is false.
@@ -145,14 +166,32 @@ void os_wait_for_critical(os_wait_for_pfunc_t condition, u32 timeout_us);
 
 /**
  * @brief Instant switch to "alarm mode".
+ *
+ * Marked `noreturn` so the static analyzer can prove that paths beyond
+ * a failed OS_SANITY/OS_ASSERT (which call os_alarm()) are unreachable.
+ * Apps overriding this WEAK default must also not return.
  */
-void os_alarm(void);
+__attribute__((noreturn)) void os_alarm(void);
+
+/**
+ * @brief Instant switch to "alarm mode" and force RA register set.
+ *
+ * Forces an immediate switch to alarm mode, equivalent to os_alarm(),
+ * but ensures that the caller's return address (RA register) is preserved.
+ *
+ * This prevents the compiler/linker from merging multiple alarm calls
+ * into a shared trampoline. Without this, different alarm triggers may end up 
+ * reporting the same return address due to optimization, making debugging ambiguous.
+ */
+static inline void os_alarm_ra(void) {
+    ARCH_CALL_RA("os_alarm");
+}
 
 /**
  * @brief Switch to "alarm mode" from ISR.
  * 
  * When critical error happen in ISR we dont want get stuck in ISR endless loop.
- * Such error should be handled in main looop by some flag.
+ * Such error should be handled in main loop by some flag.
  */
 void os_alarm_isr(void);
 

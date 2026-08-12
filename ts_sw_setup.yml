@@ -1,2 +1,13 @@
-ordt 230321.01
+drawio 15.2.7
+texlive 2021
+plantuml 1.2021.10
+riscv-toolchain 20210412-1
+openocd v0.11.0
+cmake 3.21.3
+# cppcheck 2.6 # Disable cppcheck for now as it does not work.
+srecord 1.64
+ts-latex-lib v0.6
+tropic01-csp all
+ts-python-env 0.6
 doxygen 1.10.0
+ordt 230321.01

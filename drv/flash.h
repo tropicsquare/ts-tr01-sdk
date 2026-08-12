@@ -91,9 +91,15 @@
  *  - Configures Flash macro timing
  *  - Reads out and applies Flash macro trim
  *
- * @note: You need to call also flash_init_scrambling() during initialization phase
+ * @note You need to call also flash_init_scrambling() during initialization phase
  */
 void flash_init(void);
+
+/**
+ * @brief Check if the flash subsystem has been initialized.
+ * @return TS_TRUE if flash_init() has been successfully completed.
+ */
+ts_bool flash_init_done(void);
 
 /**
  * @brief Disables clock for Flash Subsystem
@@ -158,6 +164,16 @@ void flash_write_word(u32 address, u32 data);
  * @returns TS_TRUE if data were programmed correctly, TS_FALSE otherwise
  */
 ts_bool flash_write_word_verify(u32 address, u32 data);
+
+
+/**
+ * @brief Writes (Programs) single word of Flash Memory from ISR.
+ * Special version for usage from ISR with limited functionality, does not have timeout.
+ * Use with caution only when really necessary.
+ * @param[in] address Byte address to write
+ * @param[in] data Data to write(program)
+ */
+void flash_write_word_isr(u32 address, u32 data);
 
 /**
  * @brief Check if flash has empty space then writes single word of Flash Memory and checks the word was written correctly.

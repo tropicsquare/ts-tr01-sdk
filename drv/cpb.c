@@ -159,7 +159,7 @@ void cpb_write_data(u8 *src, size_t offset, size_t len)
 
 __ISR void irq_cpb_handler(void)
 {
-    LOG_WARNING("CPB Interrupt !");
+    _LOG_DEBUG("CPB Interrupt !");
     os_alarm_isr();
 }
 

@@ -23,7 +23,7 @@ ts_bool sys_init(void)
 
 void sys_cpu_sleep(void)
 {   // suspend to next interrupt
-    asm("wfi");
+    ARCH_WFI();
 }
 
 void sys_copy_regs_to_mem(u8 *dest, u32 addr, size_t size)

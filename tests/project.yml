@@ -1,0 +1,95 @@
+---
+:project:
+  :which_ceedling: gem
+  :ceedling_version: 1.0.1
+  :use_mocks: TRUE
+  :use_test_preprocessor: :none
+  :use_backtrace: :simple
+  :build_root: build
+  :test_file_prefix: test_
+  :default_tasks:
+    - test:all
+  :test_threads: 8
+  :compile_threads: 8
+  :release_build: FALSE
+
+:test_build:
+  :use_assembly: FALSE
+
+:paths:
+  :test:
+    - +:test/**
+    - -:test/support
+  :source:
+    # SDK source under test
+    - ../common
+    - ../hal
+    - ../drv
+  :include:
+    # Stubs shadow real HW headers (must come first)
+    - test/support/stubs
+    # SDK headers
+    - ../common
+    - ../hal
+    - ../drv
+    - ../api
+  :support:
+    - test/support
+    - test/support/stubs
+  :libraries: []
+
+:files:
+  :test: []
+  :source: []
+
+:defines:
+  :test:
+    - TEST
+    - UNIT_TEST
+
+:cmock:
+  :plugins:
+    - :ignore
+    - :callback
+    - :expect_any_args
+  :verbosity: 2
+  :when_no_prototypes: :warn
+  :mock_prefix: 'mock_'
+  :strippables: ['(?:__attribute__\s*\([ (]*.*?[ )]*\)+)']
+  :attributes:
+    - __ISR
+    - __WEAK
+    - __PACK
+    - register
+    - extern
+  :treat_externs: :exclude
+  :treat_inlines: :exclude
+  :treat_as:
+    u8:     HEX8
+    u16:    HEX16
+    u32:    HEX32
+    u64:    HEX64
+    ts_bool: HEX8
+  :memcmp_if_unknown: true
+  :when_ptr: :compare_data
+  :enforce_strict_ordering: true
+  :fail_on_unexpected_calls: true
+  :callback_include_count: true
+
+:unity:
+  :defines:
+    - UNITY_EXCLUDE_FLOAT
+    - UNITY_SUPPORT_64
+
+:plugins:
+  :load_paths: []
+  :enabled:
+    - module_generator
+    - report_tests_pretty_stdout
+
+:flags:
+  :test:
+    :compile:
+      '*':
+        - -Wall
+        - -Wextra

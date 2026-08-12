@@ -72,9 +72,8 @@ LOG_DEF("FSS");
                               (_CMD_NO_ACTION << FSS_CONFIG_DEBUG_EN_POS) | \
                                                  FSS_CONFIG_FSS_EN_MASK)
 
-// FSS_CONFIG_READ_MODE defs
-#define _FSS_CONFIG_READ_MODE_RECALL (0x0 << FSS_CONFIG_READ_MODE_POS)
-#define _FSS_CONFIG_READ_MODE_NORMAL (0x3 << FSS_CONFIG_READ_MODE_POS)
+#define _FSS_CONFIG_READ_MODE_RECALL (0x0)
+#define _FSS_CONFIG_READ_MODE_NORMAL (0x3)
 
 #define _FSS_STATUS_ERROR_ANY (FSS_STATUS_DECRYPT_ERR_MASK | \
                                FSS_STATUS_ENCRYPT_ERR_MASK | \
@@ -92,8 +91,13 @@ LOG_DEF("FSS");
 #define _FSS_STATUS_TIMEOUT_MAX 10000 // [us]
 #define _FSS_STATUS_TIMEOUT_DEF  1000 // [us]
 
+#define _FLASH_ISR_TIMEOUT (115000) // number of iterations to get approx 10ms
+
 #define _FSS_SECTOR_SCRAM_ITEMS    6
-#define _FSS_PAGE_SCRAM_ITEMS     10
+#define _FSS_PAGE_SCRAM_ITEMS      7
+// NOTE: we have physically 2^10 pages (sectors), but MSB 3 bits are fixed (without scrambling)
+//       The reason is to avoid remap i.e. MACANDD to CPU accessible space.
+#define _FSS_WORD_SCRAM_SIZE       8 // number of items which fit into one configuration word
 
 static const u32 FL_MAGIC_WORD = 0xF0A55A0F;
 #define _TRIM_DEFAULT_VALUE (0x0000FFFF)
@@ -125,6 +129,7 @@ static flash_sector_t _sector_cache;
 static u32 _fss_config_reg_cache = 0; // FSS_CONFIG_ADDR register cache to reduce read/modify/write
 static volatile ts_bool _op_done; // ISR controlled
 static volatile ts_bool _op_error; // ISR controlled
+static ts_bool _flash_init_done;
 
 static ts_bool _condition_op_done(void)
 {
@@ -144,6 +149,25 @@ static ts_bool _condition_idle(void)
 static void _fss_wait_for_idle(void)
 {
     os_wait_for_critical(_condition_idle, _FSS_STATUS_TIMEOUT_MAX); 
+}
+
+/**
+ * @brief Wait for idle using busy loop.
+ *
+ * Usable when os_wait_for* cant work. I.e called from ISR.
+ */
+static ts_bool _fss_wait_for_idle_isr(void)
+{
+    u32 retries = _FLASH_ISR_TIMEOUT;
+
+    while (_condition_idle() != TS_TRUE)
+    {
+        if (--retries == 0)
+        {
+            return TS_FALSE;
+        }
+    }
+    return TS_TRUE;
 }
 
 /**
@@ -217,7 +241,14 @@ inline static ts_bool _flash_cfg_basic(void)
                  FIELD_PREP(FSS_TIMING_COURSE_1US_MASK, HW_CLOCK_MHZ);
     _FSS_REG_WRITE(FSS_TIMING_COURSE_ADDR, course);
 
-    // Write CONFIG[FSS_EN] = 1.
+    // Set CONFIG[FSS_EN] = 1
+    _FSS_REG_PTR(FSS_CONFIG_ADDR) |= FSS_CONFIG_FSS_EN_MASK;
+
+    // Wait until STATUS[IDLE] = 1.
+    _fss_wait_for_idle();
+
+    // Write the rest of the CONFIG register
+    // (Needed as CONFIG[PAGE] is read-only when STATUS[IDLE]=0).
     _FSS_REG_WRITE(FSS_CONFIG_ADDR, _FSS_CONFIG_BASIC     |
                                     _FSS_CONFIG_PAGE_MAIN |
                                     FSS_CONFIG_VTA_EN_MASK);
@@ -229,8 +260,9 @@ inline static ts_bool _flash_cfg_basic(void)
     _FSS_REG_WRITE(FSS_INT_EN_ADDR, FSS_INT_EN_OP_DONE_EN_MASK |
                                     FSS_INT_EN_ECC_DED_F_EN_MASK);
 
-    // Load register cache
-    _fss_config_reg_cache = _FSS_REG_READ(FSS_CONFIG_ADDR) | _FSS_CONFIG_READ_MODE_NORMAL;
+    // Load register cache (mirrors real CONFIG; READ_MODE stays Recall until
+    // trim is done - see _flash_cfg_trim).
+    _fss_config_reg_cache = _FSS_REG_READ(FSS_CONFIG_ADDR);
 
     return TS_TRUE;
 }
@@ -269,7 +301,10 @@ inline static void _flash_cfg_trim(void)
     // EAHBM clears STATUS[OP_DONE].
     _FSS_REG_WRITE(FSS_STATUS_ADDR, FSS_STATUS_OP_DONE_MASK);
 
-    // Restore config register
+    // Trim done -> Normal read mode is now safe.
+    FIELD_SET(_fss_config_reg_cache, FSS_CONFIG_READ_MODE_MASK, _FSS_CONFIG_READ_MODE_NORMAL);
+
+    // Restore config register (now with Normal read mode).
     _FSS_REG_WRITE(FSS_CONFIG_ADDR, _fss_config_reg_cache);
 }
 
@@ -307,6 +342,12 @@ void flash_init(void)
     _op_error = TS_FALSE;
     
     flash_wakeup();
+    _flash_init_done = TS_TRUE; // NOTE: before init we have here 0 (not TS_FALSE)
+}
+
+ts_bool flash_init_done(void)
+{
+    return _flash_init_done;
 }
 
 void flash_suspend(void)
@@ -367,7 +408,7 @@ void flash_init_scrambling(u8 *seed)
     // <seed> is (per chip fixed) randomizing sequence at least
     // _FSS_SECTOR_SCRAM_ITEMS + _FSS_PAGE_SCRAM_ITEMS bytes long
     u32 scram_value;
-    u8 sequence[_FSS_PAGE_SCRAM_ITEMS];
+    u8 sequence[_FSS_WORD_SCRAM_SIZE];
 
     // Write FSS_SECTOR_SCRAM register. Words within a sector will be re-ordered.
     //    write sequence of reordered numbers 0..5 (each number once)
@@ -378,20 +419,16 @@ void flash_init_scrambling(u8 *seed)
     _FSS_REG_WRITE(FSS_SECTOR_SCRAM_ADDR, scram_value);
 
     // Write FSS_PAGE_SCRAM_* registers. Sectors within a page will be re-ordered.
-    //    write sequence of reordered numbers 0..9 (each number once)
-    scramble_init(sequence, _FSS_PAGE_SCRAM_ITEMS);
+    //    write sequence of reordered numbers 0..6 (each number once)
+    scramble_init(sequence, _FSS_WORD_SCRAM_SIZE); // init for whole word (not only _FSS_PAGE_SCRAM_ITEMS), to keep ACAB compatibility
     scramble_shuffle(sequence, _FSS_PAGE_SCRAM_ITEMS, seed + _FSS_SECTOR_SCRAM_ITEMS);
-
-    // We have prepared 10 values but we need to split them to two registers (8+2)
-    scram_value = scramble_value(sequence, 8);
+    scram_value = scramble_value(sequence, _FSS_WORD_SCRAM_SIZE);
     _FSS_REG_WRITE(FSS_PAGE_SCRAM_0_ADDR, scram_value);
-
-    scram_value = scramble_value(sequence+8, _FSS_PAGE_SCRAM_ITEMS-8);
-    _FSS_REG_WRITE(FSS_PAGE_SCRAM_1_ADDR, scram_value);
+    // The FSS_PAGE_SCRAM_1 and PAGE_SCRAM_0[ADDR7] contains RO constant values
 
     //  NOTE: If CPU tried to access NVR page or Redundancy page, the FSS automatically
     //        over-rides the scrambling and uses unscrambled addresses regardless of
-    //        registers con-figuration (SECTOR_SCRAM and PAGE_SCRAM*).
+    //        registers configuration (SECTOR_SCRAM and PAGE_SCRAM*).
 }
 
 u32 flash_read_word (u32 address)
@@ -408,9 +445,9 @@ u32 flash_read_word (u32 address)
 
 ts_bool flash_read_data(u32 *dest, u32 address, size_t size)
 {
-    if (((address + size) >= FLASH_SIZE) || (address & 0x3))
+    if (((address + size) >= FLASH_SIZE) || (address & 0x3) || (size & 0x3))
     {
-        return TS_FALSE; // Out of bounds
+        return TS_FALSE; // Out of bounds or non-aligned size
     }
 
     _fss_wait_for_idle();
@@ -439,7 +476,7 @@ ts_bool flash_read_data(u32 *dest, u32 address, size_t size)
 
 void flash_write_word(u32 address, u32 data)
 {
-    if ((address > FLASH_SIZE) || (address & 0x3))
+    if ((address >= FLASH_SIZE) || (address & 0x3))
     {
         return; // out of bounds
     }
@@ -455,6 +492,28 @@ ts_bool flash_write_word_verify(u32 address, u32 data)
     flash_write_word(address, data);
 
     return (flash_read_word(address) == data) ? TS_TRUE : TS_FALSE;
+}
+
+void flash_write_word_isr(u32 address, u32 data)
+{
+    if ((address > FLASH_SIZE) || (address & 0x3))
+    {
+        return; // out of bounds
+    }
+    
+    if (_fss_wait_for_idle_isr() != TS_TRUE)
+    {
+        return;
+    }
+
+    _FSS_REG_WRITE(FSS_ADDRESS_ADDR, address);
+    _FSS_REG_WRITE(FSS_PROG_DATA_ADDR, data);
+    
+    if (_fss_wait_for_idle_isr() != TS_TRUE)
+    {
+        return;
+    }
+    _FSS_REG_WRITE(FSS_COMMAND_ADDR, _FSS_COMMAND_NO_ACTION ^ (_CMD_MASK << FSS_COMMAND_PROG_ONE_POS));
 }
 
 ts_bool flash_safe_write_word(u32 address, u32 data)
@@ -478,7 +537,7 @@ ts_bool flash_safe_write_word(u32 address, u32 data)
 
 ts_bool flash_read_sector(u32 *dest, u32 address)
 {
-    if ((address > FLASH_SIZE) || (address & FLASH_SECTOR_MASK))
+    if ((address >= FLASH_SIZE) || (address & FLASH_SECTOR_MASK))
     {
         return TS_FALSE; // out of bounds
     }
@@ -496,7 +555,7 @@ size_t flash_read_sector_enc(u8 *dest, u32 address)
 {
     flash_enc_sector_t *sector = &_sector_cache.enc;
 
-    if ((address > FLASH_SIZE) || (address & FLASH_SECTOR_MASK))
+    if ((address >= FLASH_SIZE) || (address & FLASH_SECTOR_MASK))
     {
         return 0; // out of bounds
     }
@@ -523,7 +582,7 @@ size_t flash_read_sector_enc(u8 *dest, u32 address)
 
 ts_bool flash_read_nvr_to_buf(u32 address)
 {
-    if ((address > FLASH_SIZE) || (address & FLASH_SECTOR_MASK))
+    if ((address >= FLASH_SIZE) || (address & FLASH_SECTOR_MASK))
     {
         return TS_FALSE; // out of bounds
     }
@@ -531,7 +590,9 @@ ts_bool flash_read_nvr_to_buf(u32 address)
 
     // Set CONFIG[READ_MODE] to Recall read and CONFIG[PAGE] to NVR page.
     // NOTE: CONFIG_VTA_EN must be switched OFF
-    _FSS_REG_WRITE(FSS_CONFIG_ADDR, _FSS_CONFIG_BASIC | _FSS_CONFIG_READ_MODE_RECALL | _FSS_CONFIG_PAGE_NVR);
+    _FSS_REG_WRITE(FSS_CONFIG_ADDR, _FSS_CONFIG_BASIC |
+                                    FIELD_PREP(FSS_CONFIG_READ_MODE_MASK, _FSS_CONFIG_READ_MODE_RECALL) |
+                                    _FSS_CONFIG_PAGE_NVR);
 
     // Set ADDRESS
     _FSS_REG_WRITE(FSS_ADDRESS_ADDR, address);
@@ -556,7 +617,7 @@ ts_bool flash_read_nvr(u32 *dest, u32 address)
 
 ts_bool flash_write_sector(u32 address, u32 *data)
 {
-    if ((address > FLASH_SIZE) || (address & FLASH_SECTOR_MASK))
+    if ((address >= FLASH_SIZE) || (address & FLASH_SECTOR_MASK))
     {
         return TS_FALSE; // out of bounds
     }
@@ -586,7 +647,7 @@ ts_bool flash_write_sector_enc(u32 address, void *data, size_t size, u8 nonce[FL
 {
     flash_enc_sector_t *sector = &_sector_cache.enc;
 
-    if ((address > FLASH_SIZE)        ||
+    if ((address >= FLASH_SIZE)        ||
         (address & FLASH_SECTOR_MASK) ||
         (size  > FLASH_MAX_ENCRYPTED_SIZE))
     {
@@ -616,7 +677,7 @@ ts_bool flash_write_sector_enc(u32 address, void *data, size_t size, u8 nonce[FL
 
 ts_bool flash_verify_erased(u32 address)
 {
-    if ((address > FLASH_SIZE) || (address & FLASH_SECTOR_MASK))
+    if ((address >= FLASH_SIZE) || (address & FLASH_SECTOR_MASK))
     {
         return TS_FALSE;
     }
@@ -628,24 +689,26 @@ ts_bool flash_verify_erased(u32 address)
 
 void flash_erase_sector(u32 address)
 {
+    _fss_wait_for_idle();
     _FSS_REG_WRITE(FSS_ADDRESS_ADDR, address);
-    _fss_command_exec(FSS_COMMAND_SECTOR_ERASE_POS);
+    _fss_command(FSS_COMMAND_SECTOR_ERASE_POS);
 }
 
 void flash_erase_block(u32 address)
 {
+    _fss_wait_for_idle();
     _FSS_REG_WRITE(FSS_ADDRESS_ADDR, address);
-    _fss_command_exec(FSS_COMMAND_BLOCK_ERASE_POS);
+    _fss_command(FSS_COMMAND_BLOCK_ERASE_POS);
 }
 
 void flash_erase_chip(void)
 {
-    _fss_command_exec(FSS_COMMAND_CHIP_ERASE_POS);
+    _fss_command(FSS_COMMAND_CHIP_ERASE_POS);
 }
 
 void flash_flush_rambuf(void)
 {
-    _fss_command_exec(FSS_COMMAND_FLUSH_RAM_POS);
+    _fss_command(FSS_COMMAND_FLUSH_RAM_POS);
 }
 
 __ISR void irq_flash_handler(void)

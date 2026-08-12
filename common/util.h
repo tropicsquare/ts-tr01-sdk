@@ -25,4 +25,17 @@
  */
 int ct_memcmp(const void *a, const void *b, size_t size);
 
+
+/**
+ * @brief Perform memory clear.
+ *
+ * Fast variant for memory clear.
+ * The memset() implementation in RiscV32 is not effective, it writes byte by byte.
+ *
+ * @param dest Memory destination, must be 32bit alligned.
+ * @param size Number of bytes to clear, must be 32bit alligned.
+ *
+ */
+void memclear32(u32 *dest, u32 size);
+
 #endif // ! UTIL_H

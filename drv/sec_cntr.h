@@ -136,9 +136,29 @@ typedef enum {
 void sec_cntr_init(const sec_cntr_config_t *config);
 
 /**
- * @brief Configures interrupts of Security Center
+ * @brief Initialize Security Center app functions
+ *
+ * Keep and check configuration, update status only.
  */
-void sec_cntr_configure_interrupts(u64 int_en);
+void sec_cntr_init_app(void);
+
+
+/**
+ * @brief Enable set of sensors
+ *
+ * Usable for enabling different set of sensors which was not enabled in sec_cntr_init()
+ *
+ * @param channels Channels to start guarding. Shall be mask of sec_cntr_alarm_channels_e.
+ *
+ */
+void sec_cntr_set_active_sensors(u64 channels);
+
+/**
+ * @brief Configures interrupts of Security Center
+ *
+ * @param channels Channels to start guarding. Shall be mask of sec_cntr_alarm_channels_e.
+ */
+void sec_cntr_configure_interrupts(u64 channels);
 
 /**
  * @brief Enable clock for the Security Center.
@@ -169,9 +189,21 @@ void sec_cntr_clr_alarms(u64 channels);
 void sec_cntr_set_alarms(u64 channels);
 
 /**
- * @returns Mask of active alarm channels (sec_cntr_alarm_channels_e).
+ * @returns Mask of recorded alarms since start-up.
+ */
+u64 sec_cntr_get_alarm_memory(void);
+
+/**
+ * @returns Mask of all active alarm channels (sec_cntr_alarm_channels_e).
  */
 u64 sec_cntr_get_alarms(void);
+
+
+/**
+ * @returns Mask of enabled active alarm channels (sec_cntr_alarm_channels_e).
+ */
+u64 sec_cntr_get_active_alarms(void);
+
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 // Life-cycle control

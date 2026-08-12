@@ -9,7 +9,7 @@ set(CMAKE_TRY_COMPILE_TARGET_TYPE "STATIC_LIBRARY")
 
 set(RISC_V_TOOLCHAIN_PATH      $ENV{RISCV_TOOLCHAIN_ROOT}/bin)
 
-set(CMAKE_AR                    "${RISC_V_TOOLCHAIN_PATH}/riscv32-unknown-elf-ar"  )
+set(CMAKE_AR                    "${RISC_V_TOOLCHAIN_PATH}/riscv32-unknown-elf-gcc-ar"  )
 set(CMAKE_ASM_COMPILER          "${RISC_V_TOOLCHAIN_PATH}/riscv32-unknown-elf-gcc" )
 set(CMAKE_C_COMPILER            "${RISC_V_TOOLCHAIN_PATH}/riscv32-unknown-elf-gcc" )
 set(CMAKE_CXX_COMPILER          "${RISC_V_TOOLCHAIN_PATH}/riscv32-unknown-elf-g++" ) 
@@ -21,7 +21,7 @@ set(CMAKE_OBJCOPY               "${RISC_V_TOOLCHAIN_PATH}/riscv32-unknown-elf-ob
 set(CMAKE_OBJDUMP               "${RISC_V_TOOLCHAIN_PATH}/riscv32-unknown-elf-objdump"
      CACHE FILEPATH "The toolchain objdump command " FORCE )
 
-set(CMAKE_RANLIB                "${RISC_V_TOOLCHAIN_PATH}/riscv32-unknown-elf-ranlib" )
+set(CMAKE_RANLIB                "${RISC_V_TOOLCHAIN_PATH}/riscv32-unknown-elf-gcc-ranlib" )
 set(CMAKE_SIZE                  "${RISC_V_TOOLCHAIN_PATH}/riscv32-unknown-elf-size"   )
 set(CMAKE_STRIP                 "${RISC_V_TOOLCHAIN_PATH}/riscv32-unknown-elf-strip"  )
 

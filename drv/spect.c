@@ -28,7 +28,7 @@ LOG_DEF("SPECT");
 
 /**
  * @brief Define max timeout for SPECT command.
- * @note The slowest is ECDSA_SIGN (about 7.8M clk), which is about 110 ms + stealing.
+ * @note The slowest is ECDSA_SIGN (about 7.8M clk), which is about 110 ms + secure clock penalty.
  */
 #define _SPECT_COMMAND_TIMEOUT_MAX  (300 * 1000) // [us]
 
@@ -59,6 +59,13 @@ ts_bool spect_init(void)
         return TS_FALSE;
     }
     return TS_TRUE;
+}
+
+void spect_scramble(void)
+{
+    // Make SPECT register file scrambling 
+    _SPECT_REG_WRITE(SPECT_CONFIG_ADDR, SPECT_CONFIG_RF_SCRAM_EN_MASK | SPECT_CONFIG_RF_SCRAM_INIT_MASK);
+    // NOTE: to have it working, the SEC_CNTR_PRECHARGE_SPECT_EN must be enabled
 }
 
 void spect_wakeup(void)
@@ -172,14 +179,23 @@ static ts_bool _condition_spect_done(void)
     return TS_FALSE;
 }
 
-static ts_bool _spect_wait_done_timeout(u32 timeout_us)
-{
-    spect_result_code_t result;
-    
-    if (os_wait_for(_condition_spect_done, timeout_us) != TS_TRUE)
+ts_bool spect_wait_op_done(void)
+{ 
+    if (os_wait_for(_condition_spect_done, _SPECT_COMMAND_TIMEOUT_MAX) != TS_TRUE)
     {
         LOG_ERROR_NUM(_SPECT_ERR_TIMEOUT);
         _LOG_DEBUG("ST: %x", _SPECT_REG_READ(SPECT_STATUS_ADDR));
+        return TS_FALSE;
+    }
+    return _spect_done;
+}
+
+ts_bool spect_wait_done(void)
+{   
+    spect_result_code_t result;
+
+    if (spect_wait_op_done() != TS_TRUE)
+    {
         return TS_FALSE;
     }
 
@@ -198,11 +214,6 @@ static ts_bool _spect_wait_done_timeout(u32 timeout_us)
         LOG_ERROR_NUM(_SPECT_ERR_IDLE);
     }
     return _spect_done;
-}
-
-ts_bool spect_wait_done(void)
-{
-    return (_spect_wait_done_timeout(_SPECT_COMMAND_TIMEOUT_MAX));
 }
 
 spect_result_code_t spect_result_code(void)

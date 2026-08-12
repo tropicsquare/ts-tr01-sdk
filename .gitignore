@@ -7,3 +7,4 @@ examples/**/build/*
 *.bak
 build/
 .codechecker/
+lib-nonpublic/

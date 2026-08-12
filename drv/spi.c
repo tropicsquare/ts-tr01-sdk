@@ -52,8 +52,6 @@ static void _tx_reset(void)
 
 void spi_ll_init(u8 chip_status)
 {
-    // reset periphery, to ensure "READY" is not set (i.e. alarm mode)
-    soc_ctrl_reset(SOC_CTRL_UTRESET_SSRST_MASK);
     // enable periphery clock
     soc_ctrl_clk_en(SOC_CTRL_CLK_EN_SSCLKEN_MASK);
     // enable minimal SPI functionality
@@ -78,8 +76,15 @@ void spi_init(spi_rx_callback_t rx_callback, spi_tx_callback_t tx_callback)
 
     _rx_byte = rx_callback;
     _tx_fetch_word = tx_callback;
-    
-    // enable IRQ 
+
+    // Discard any L2 request bytes the SS latched during the boot/START window,
+    // before the interface is READY. This replaces the SSRST formerly done in
+    // spi_ll_init() (removed in ETR01FW-230 to avoid the chip-status START-flag
+    // glitch) without resetting the subsystem. Must run before enabling the
+    // request IRQ so a stale request is dropped instead of delivered to _rx_byte.
+    spi_flush_request_queue();
+
+    // enable IRQ
     _SS_REG_WRITE(SS_INT_EN_ADDR, 0 \
         | SS_INT_EN_REQQNETY_MASK    // request queue empty (SS_INT_STATUS_REQQNETYS_MASK)
         );
@@ -129,6 +134,15 @@ void spi_clear_response_queue(void)
         ;
 }
 
+void spi_flush_request_queue(void)
+{   // there is no HW request-queue-clear command (SS_COMMAND has RSPQCLR only),
+    // so drain the request FIFO by popping it empty; mirrors the pop in irq_ss_handler()
+    while (spi_request_queue_empty() != TS_TRUE)
+    {
+        (void)_SS_REG_READ(SS_REQQ_POP_ADDR);
+    }
+}
+
 void spi_tx_enable(void)
 {   // enable IRQ for fetching data
     if (_tx_fetch_word == NULL)
@@ -153,6 +167,11 @@ void spi_set_chip_status(u8 value)
 
     reg |= ((value << SS_CONFIG_FBVAL_POS) & SS_CONFIG_FBVAL_MASK);
     _SS_REG_WRITE(SS_CONFIG_ADDR, reg);
+}
+
+void spi_tx_push(u32 w)
+{
+    _SS_REG_WRITE(SS_RSPQ_PUSH_ADDR, w);
 }
 
 __ISR void irq_ss_handler(void)
@@ -195,7 +214,7 @@ __ISR void irq_ss_handler(void)
             return;
         }
         // write u32 to fifo
-        _SS_REG_WRITE(SS_RSPQ_PUSH_ADDR, w);
+        spi_tx_push(w);
     }
 }
 

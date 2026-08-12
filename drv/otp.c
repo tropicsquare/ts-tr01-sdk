@@ -173,12 +173,12 @@ void otp_init_scrambling(u8 *seed)
     scramble_init(sequence, sizeof(sequence));
     scramble_shuffle(sequence, sizeof(sequence), seed);
     // we have prepared 11 values but we need to split them to two registers (8+3)
-    scram_value = scramble_value(sequence, _OTP_SCRAM_WORD_NIBBLES);
+    scram_value = scramble_value_reversed(sequence, _OTP_SCRAM_WORD_NIBBLES);
     _OTP_REG_WRITE(OTP_CTRL_SCRAM_0_ADDR, scram_value);
      
-    scram_value = scramble_value(sequence+_OTP_SCRAM_WORD_NIBBLES, _OTP_SCRAM_ITEMS-_OTP_SCRAM_WORD_NIBBLES);
+    scram_value = scramble_value_reversed(sequence+_OTP_SCRAM_WORD_NIBBLES, _OTP_SCRAM_ITEMS-_OTP_SCRAM_WORD_NIBBLES);
     _OTP_REG_WRITE(OTP_CTRL_SCRAM_1_ADDR, scram_value);
-
+    // NOTE: We use the "reversed" version of scramble to keep it as in ACAB where it was unintentionally reversed.
 }
 
 static u32 _otp_read_word(u32 addr)

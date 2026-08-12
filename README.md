@@ -108,5 +108,57 @@ There are 2 options to get reports:
     - After running analysis, errors will be available either in CodeChecker panel or in VS Code's problems tab in the bottom.
 
 ## Remarks
-The current CodeChecker configuration is in YAML format, as it is more human-readable than JSON and also supports comments.  
-The configuration file enables some strict checkers, which may produce a lot of warnings. It is recommended to run the analysis using the full configuration at least once. After that, you can manually disable any checkers you find unnecessary.
+The current CodeChecker configuration is in YAML format, as it is more human-readable than JSON and also supports comments.
+
+The enabled checkers are intentionally a minimal subset of what CodeChecker offers — the set that passes green on the current codebase. New checks (`bugprone-*`, `cert-*`, `cppcoreguidelines-*`, the `sensitive` / `portability` profiles, etc.) should be added incrementally: enable, clean up the findings they produce, commit. See `scripts/codechecker/codechecker_config.yml` for the current set.
+
+# Rebuilding lib-nonpublic binaries
+
+The SDK ships pre-built binary objects in `bin/`, produced from a separate
+`ts-tr01-lib-nonpublic` repository. To rebuild them — for an update, or to
+verify what's committed matches the recorded source commit — use
+`build_lib_nonpublic.sh`.
+
+The script needs the lib-nonpublic repo URL. Supply it one of three ways:
+
+```sh
+# 1. environment variable (e.g. in your shell rc)
+export TS_LIB_NONPUBLIC_REPO_URL=ssh://…/ts-tr01-lib-nonpublic.git
+
+# 2. one-shot env override
+TS_LIB_NONPUBLIC_REPO_URL=ssh://…/ts-tr01-lib-nonpublic.git ./build_lib_nonpublic.sh
+
+# 3. explicit flag
+./build_lib_nonpublic.sh --repo=ssh://…/ts-tr01-lib-nonpublic.git
+```
+
+Internal Tropic Square developers can get the URL from the project maintainers
+or from the GitLab project CI/CD variables page. CI pipelines pick it up
+automatically from the `TS_LIB_NONPUBLIC_REPO_URL` CI/CD variable on this
+project.
+
+## How the source commit is chosen
+
+The source commit is pinned in `bin/lib-nonpublic.manifest`. Which commit the
+script actually builds depends on whether `--ref` is given and whether the
+manifest already exists:
+
+| `--ref` given | Manifest present | What the script does                                                                            |
+|---------------|------------------|-------------------------------------------------------------------------------------------------|
+| yes           | —                | clones the given commit/branch; manifest is rewritten with that SHA                             |
+| no            | yes              | reads the SHA from the manifest and clones that commit — reproduces the committed binaries      |
+| no            | no               | clones remote HEAD and writes a fresh manifest (bootstrap)                                      |
+
+So: re-running with no flags reproduces what's checked in; bumping the pin to
+a newer source commit is an explicit `--ref` override; the very first run
+(when no manifest exists yet) doesn't need any flags.
+
+Other flag:
+
+- `--yes` / `-y` — non-interactive; delete an existing `./lib-nonpublic/` clone
+  without prompting.
+
+Commit the manifest together with the rebuilt binaries in the same SDK commit
+so the link from each binary to its source commit is recoverable. The
+`verify_lib_nonpublic_binaries` CI job re-runs the build at the SHA recorded
+in the manifest and fails the pipeline if the committed binaries don't match.

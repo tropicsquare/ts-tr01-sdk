@@ -28,6 +28,102 @@ build_sdk_umc55:
 
 
 ###################################################################################################
+# Unit tests (Ceedling/CMock)
+# Compiled and run on the host (no RISC-V toolchain required).
+# Uses mise to install Ruby without root if system Ruby is too old.
+###################################################################################################
+unit_tests:
+  stage: test
+  tags:
+    - shell
+  script:
+    - |
+      if ! ruby -e 'exit(RUBY_VERSION >= "2.6.0" ? 0 : 1)' 2>/dev/null; then
+        curl https://mise.run | sh
+        MISE_LOG_LEVEL=error MISE_RUBY_COMPILE=0 ~/.local/bin/mise install ruby@3.2 -y
+        export PATH="$(~/.local/bin/mise where ruby@3.2)/bin:$PATH"
+      fi
+      gem install ceedling --no-document
+      cd tests && ceedling test:all
+
+
+###################################################################################################
+# Static analysis (CodeChecker)
+#
+# `CodeChecker check` exits 2 when any finding is reported. We swallow
+# that with `|| true` so the export steps always run; `CodeChecker
+# parse -e html` is the gate — it exits 2 on findings, which fails the
+# job and (since allow_failure is not set) the pipeline.
+#
+# `parse -e codeclimate` produces a Code Climate JSON consumed by
+# GitLab's `reports.codequality` artifact, which surfaces findings
+# inline on the MR diff. It is run *before* the html gate with `|| true`
+# so its exit code does not race the gate; the JSON file is written
+# before parse exits regardless of finding count, and `when: always`
+# uploads both artifacts on failed runs so reviewers can inspect
+# findings from the MR page.
+###################################################################################################
+static_analysis:
+  stage: test
+  only:
+    - merge_requests
+    - master
+  tags:
+    - shell
+  script:
+    - source ./setup_env
+    - CodeChecker check
+        -b "./scripts/codechecker/codechecker_build.sh"
+        --config ./scripts/codechecker/codechecker_config.yml
+        || true
+    - CodeChecker parse -e codeclimate ./.codechecker/reports -o ./.codechecker/reports.json
+        --trim-path-prefix "$CI_PROJECT_DIR/" || true
+    - CodeChecker parse -e html ./.codechecker/reports -o ./.codechecker/reports_html
+  artifacts:
+    when: always
+    paths:
+      - .codechecker/reports_html
+    reports:
+      codequality: .codechecker/reports.json
+    expire_in: 2 weeks
+
+
+###################################################################################################
+# Verify the committed lib-nonpublic binaries match the source commit
+# recorded in bin/lib-nonpublic.manifest. Re-clones the lib-nonpublic
+# repo at that commit, rebuilds, and diffs the working tree — any change
+# means the committed binaries do not match the recorded source.
+#
+# Access:
+#   - TS_LIB_NONPUBLIC_REPO_URL (CI/CD variable) is an HTTPS URL with
+#     ${CI_JOB_TOKEN} embedded. GitLab expands the token at job runtime
+#     (the variable has Expand = true), so no long-lived credential is
+#     stored anywhere.
+#   - The lib-nonpublic project must allowlist this project's
+#     CI_JOB_TOKEN: in the lib-nonpublic project go to Settings >
+#     CI/CD > Job token permissions and add `ts-tr01-sdk` to the
+#     allowlist. Without this the clone fails with
+#     "project not found or no permission".
+#   - For local invocation, developers set TS_LIB_NONPUBLIC_REPO_URL
+#     in their own environment (typically an ssh:// URL using their
+#     own credentials).
+###################################################################################################
+verify_lib_nonpublic_binaries:
+  stage: test
+  only:
+    - merge_requests
+    - master
+  tags:
+    - shell
+  script:
+    - source ./setup_env
+    - 'test -f bin/lib-nonpublic.manifest || { echo "ERROR - bin/lib-nonpublic.manifest missing; run build_lib_nonpublic.sh and commit the result." >&2; exit 1; }'
+    - ./build_lib_nonpublic.sh --yes
+    - git checkout -- bin/lib-nonpublic.manifest
+    - 'git diff --stat --exit-code || { echo "ERROR - committed lib-nonpublic binaries do not match the commit recorded in bin/lib-nonpublic.manifest." >&2; exit 1; }'
+
+
+###################################################################################################
 # Mirror the public branch to Github
 ###################################################################################################
 github_mirror:
@@ -38,19 +134,20 @@ github_mirror:
     only:
       - public
     script:
-      - source ./setup_env
+      - echo "Mirroring was temporarily disabled."
+      ## - source ./setup_env
 
       # Ensure we are on branch, not detached head
-      - git checkout public
+      ## - git checkout public
 
       # Use Proxy Github account "tropic-gitlab" to push to the github
-      - git config --global user.email "tropic-gitlab@tropicsquare.com"
-      - git config --global user.name "tropic-gitlab"
+      ## - git config --global user.email "tropic-gitlab@tropicsquare.com"
+      ## - git config --global user.name "tropic-gitlab"
 
       # Add remote origin
-      - git remote remove github || true
-      - git remote add github git@github.com:tropicsquare/ts-tr01-sdk.git
+      ## - git remote remove github || true
+      ## - git remote add github git@github.com:tropicsquare/ts-tr01-sdk.git
 
       # Push - Use SSH key created for this purpose
-      - GIT_SSH_COMMAND="ssh -i ~/.ssh/gitlab_mirror.id_rsa" git push github
-      - GIT_SSH_COMMAND="ssh -i ~/.ssh/gitlab_mirror.id_rsa" git push github --tags
+      ## - GIT_SSH_COMMAND="ssh -i ~/.ssh/gitlab_mirror.id_rsa" git push github
+      ## - GIT_SSH_COMMAND="ssh -i ~/.ssh/gitlab_mirror.id_rsa" git push github --tags

@@ -100,10 +100,10 @@ static int ll_vsnprintf(char *buffer, size_t bufsz, char const *format, va_list 
                         {
                             int n = (val >> 28) & 0xF;
                             if (n > 9)
-                                _add(&buffer, limit, 'a' + n - 10);
+                                _add(&buffer, limit, (char)('a' + n - 10));
 
                             else
-                                _add(&buffer, limit, '0' + n);
+                                _add(&buffer, limit, (char)('0' + n));
                             val <<= 4;
                         }
                     }
