@@ -1,0 +1,246 @@
+///////////////////////////////////////////////////////////////////////////
+// Register map for IPC (Inter Process communication Channel).
+///////////////////////////////////////////////////////////////////////////
+
+enum msg_1_type {
+    e_0 = 4'b0001 {
+        desc = "generic data";
+        name = "GENERIC";
+    };
+    e_1 = 4'b0010 {
+        desc = "string data";
+        name = "STR";
+    };
+};
+
+enum msg_2_type {
+    e_0 = 4'b0001 {
+        desc = "generic data";
+        name = "GENERIC";
+    };
+    e_1 = 4'b0010 {
+        desc = "string data";
+        name = "STR";
+    };
+};
+
+enum msg_1_commands {
+    e_0 = 4'b0011 {
+        desc = "Test passed";
+        name = "PASS";
+    };
+    e_1 = 4'b0010 {
+        desc = "Test failed";
+        name = "FAIL";
+    };
+    e_2 = 4'b0100 {
+        desc = "Get random number";
+        name = "GET_RND";
+    };
+    e_3 = 4'b0101 {
+        desc = "Wait for data";
+        name = "GET_DATA";
+    };
+    e_4 = 4'b0110 {
+        desc = "Perform bulk data transfer";
+        name = "BULK_TRANSFER";
+    };
+};
+
+enum msg_2_commands {
+    e_0 = 4'b0011 {
+        desc = "Test passed";
+        name = "PASS";
+    };
+    e_1 = 4'b0010 {
+        desc = "Test failed";
+        name = "FAIL";
+    };
+    e_2 = 4'b0100 {
+        desc = "Get random number";
+        name = "GET_RND";
+    };
+    e_3 = 4'b0101 {
+        desc = "Wait for data";
+        name = "GET_DATA";
+    };
+    e_4 = 4'b0110 {
+        desc = "Perform bulk data transfer";
+        name = "BULK_TRANSFER";
+    };
+};
+
+addrmap {
+    
+    ///////////////////////////////////////////////////////////////////////////
+    // MSG_ID_1
+    //
+    // CPU side message ID register.
+    ///////////////////////////////////////////////////////////////////////////
+    reg {
+        name = "MSG_ID_1";
+        desc = "CPU message ID";
+
+        // CPU assumed to be sw 
+        default sw = rw;
+
+        field {
+            name   = "CPU_BUSY";
+            desc   = "Busy flag";
+            reset  = 0x00;
+            hw     = r;
+        } f_cpu_busy[0:0];
+
+        field {
+            name   = "CPU_DONE";
+            desc   = "Done flag. Can only be raised by the CPU, can only be lowered by parent process.";
+            reset  = 0x00;
+            hw     = rw;
+        } f_cpu_done[1:1];
+
+        // 256 bytes -> 256 chars ~ 40 English words (in 64 registers)
+        field {
+            name   = "MSG_SIZE";
+            desc   = "Size of message in bytes.";
+            reset  = 0x00;
+            hw     = r;
+        } f_msg_size[9:2];
+
+        field {
+            encode = msg_1_type;
+            name   = "MSG_TYPE";
+            desc   = "Type of message, parent process will interpret buffer contents as this type.";
+            reset  = 0x00; 
+            hw     = r;
+        } f_msg_type[13:10];
+
+        field {
+            encode = msg_1_commands;
+            name   = "MSG_CMD";
+            desc   = "Special commands to indicate test passed/failed etc.";
+            reset  = 0x00; 
+            hw     = r;
+        } f_msg_cmd[17:14];
+
+    } r_msg_id_1@0x00;
+    
+    
+    ///////////////////////////////////////////////////////////////////////////
+    // MSG_ID_2
+    //
+    // Parent process message ID register.
+    ///////////////////////////////////////////////////////////////////////////
+    reg {
+        name = "MSG_ID_2";
+        desc = "Parent process message ID";
+
+        // parent process assumed to be hw
+        default hw = rw;
+
+        field {
+            name   = "PARENT_BUSY";
+            desc   = "Busy flag";
+            reset  = 0x00;
+            sw     = r;
+        }f_parent_busy[0:0];
+
+        field {
+            name   = "PARENT_DONE";
+            desc   = "Done flag. Can only be raised by parent process, can only be lowered by the CPU.";
+            reset  = 0x00;
+            sw     = rw;
+        }f_parent_done[1:1];
+
+        field {
+            name   = "MSG_SIZE";
+            desc   = "Size of message in bytes";
+            reset  = 0x00;
+            sw     = r;
+        }f_msg_size[9:2]; 
+
+        field {
+            encode = msg_2_type;
+            name   = "MSG_TYPE";
+            desc   = "Type of message, CPU will interpret buffer data as this type.";
+            reset  = 0x00; 
+            sw     = r;
+        } f_msg_type[13:10];
+
+        field {
+            encode = msg_2_commands;
+            name   = "MSG_CMD";
+            desc   = "Special commands to indicate test passed/failed etc.";
+            reset  = 0x00; 
+            sw     = r;
+        } f_msg_cmd[17:14];
+
+    }r_msg_id_2@0x04;
+
+    ///////////////////////////////////////////////////////////////////////////
+    // CPU side buffer registers
+    ///////////////////////////////////////////////////////////////////////////
+
+    reg {
+        name = "CPU_TO_PARENT_0";
+        desc = "CPU to parent process register 0";
+
+        default sw = rw;
+        default hw = rw;
+
+        field {
+            name = "CPU_TO_PARENT_DATA";
+            desc = "CPU to parent process data 0.";
+            reset = 0x00;
+        } f_cpu_to_parent_data[31:0];
+    } r_cpu_to_parent_0@0x08;
+
+    reg {
+        name = "CPU_TO_PARENT_63";
+        desc = "CPU to parent process register 63";
+
+        default sw = rw;
+        default hw = rw;
+
+        field {
+            name = "CPU_TO_PARENT_DATA";
+            desc = "CPU to parent process data 63.";
+            reset = 0x00;
+        } f_cpu_to_parent_data[31:0];
+
+    } r_cpu_to_parent_63@0x104;
+
+
+    ///////////////////////////////////////////////////////////////////////////
+    // Parent process side buffer registers
+    ///////////////////////////////////////////////////////////////////////////
+
+    reg {
+        name = "PARENT_TO_CPU_0";
+        desc = "Parent process to CPU register 0";
+
+        default sw = rw;
+        default hw = rw;
+
+        field {
+            name = "PARENT_TO_CPU_DATA";
+            desc = "Parent process to CPU data 0.";
+            reset = 0x00;
+        } f_parent_to_cpu_data[31:0];
+    } r_parent_to_cpu_0@0x108;
+
+    reg {
+        name = "PARENT_TO_CPU_63";
+        desc = "Parent process to CPU register 63";
+
+        default sw = rw;
+        default hw = rw;
+
+        field {
+            name = "PARENT_TO_CPU_DATA";
+            desc = "Parent process to CPU data 63.";
+            reset = 0x00;
+        } f_parent_to_cpu_data[31:0];
+
+    } r_parent_to_cpu_63@0x204;
+
+} ipc;

@@ -1,0 +1,56 @@
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+  GIT_STRATEGY: clone
+
+stages:
+  - test
+  - fw_test
+  - publish
+
+
+###################################################################################################
+# Build
+###################################################################################################
+build_sdk_umc55:
+  stage: test
+  only:
+    - merge_requests
+  tags:
+    - shell
+  script:
+    - source ./setup_env
+    - cd examples/demo_umc55
+    - ./build.sh
+
+  artifacts:
+    paths:
+      - examples/demo_umc55/build/libtassic_sdk.a
+
+
+###################################################################################################
+# Mirror the public branch to Github
+###################################################################################################
+github_mirror:
+    tags:
+        - shell
+    stage: publish
+    when: always
+    only:
+      - public
+    script:
+      - source ./setup_env
+
+      # Ensure we are on branch, not detached head
+      - git checkout public
+
+      # Use Proxy Github account "tropic-gitlab" to push to the github
+      - git config --global user.email "tropic-gitlab@tropicsquare.com"
+      - git config --global user.name "tropic-gitlab"
+
+      # Add remote origin
+      - git remote remove github || true
+      - git remote add github git@github.com:tropicsquare/ts-tr01-sdk.git
+
+      # Push - Use SSH key created for this purpose
+      - GIT_SSH_COMMAND="ssh -i ~/.ssh/gitlab_mirror.id_rsa" git push github
+      - GIT_SSH_COMMAND="ssh -i ~/.ssh/gitlab_mirror.id_rsa" git push github --tags

@@ -1,0 +1,131 @@
+/**
+ * @file soc_ctrl.c
+ * @author Tropic Square
+ * @brief SoC control functions source file.
+ *
+ * @license For the license see file LICENSE.txt file in the root directory of this source tree.
+ */
+
+#include "soc_ctrl.h"
+#include "io_ops.h"
+
+#include <serial_subsystem_regs.h>
+
+#include "os.h"
+
+#define _SOC_CTRL_REG_WRITE(offset, value) IO_WRITE_32(SOCCTRL_REG_MAP_BASE_ADDR+(offset), value)
+#define _SOC_CTRL_REG_PTR(offset) PTR32_T(SOCCTRL_REG_MAP_BASE_ADDR + (offset))
+
+static u32 _ss_int_en_bak;
+
+void soc_ctrl_init(void)
+{
+    // enable smitt triggers for inputs, they are disabled by default (reset value = 0)
+    _SOC_CTRL_REG_WRITE(SOC_CTRL_PIN_SMT_ADDR, SOC_CTRL_PIN_SMT_SPI_SMT_MASK | SOC_CTRL_PIN_SMT_TPDI_SMT_MASK);
+
+    // set drive strength for outputs, the default is lowest strength (reset value = 0)
+    _SOC_CTRL_REG_WRITE(SOC_CTRL_PIN_DS_ADDR, SOC_CTRL_PIN_DS_SPI_DS_MASK | SOC_CTRL_PIN_DS_GPO_DS_MASK);
+    // NOTE: we dont set higher DS for TPDI because there is some HW limitation, which cause clock misbehavior
+}
+
+void soc_ctrl_clk_en(soc_ctrl_periph_clk_en_t peripherals)
+{
+    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_EN_ADDR) |= peripherals;
+}
+
+void soc_ctrl_clk_dis(soc_ctrl_periph_clk_en_t peripherals)
+{
+    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_EN_ADDR) &= ~peripherals;
+}
+
+void soc_ctrl_stealed_clk_en(soc_ctrl_periph_stealed_clk_t peripherals)
+{
+    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_SRC_ADDR) |= peripherals;
+}
+
+void soc_ctrl_stealed_clk_dis(soc_ctrl_periph_stealed_clk_t peripherals)
+{
+    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_SRC_ADDR) &= ~peripherals;
+}
+
+void soc_ctrl_clk_div(void)
+{
+    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_CFG_ADDR) |= SOC_CTRL_CLK_CFG_CLKDIV_MASK;
+}
+
+void soc_ctrl_stealed_mac_and_d_clk_en(void)
+{
+    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_SRC_ADDR) |= SOC_CTRL_STEALED_CLK_MAC_AND_D;
+}
+
+void soc_ctrl_stealed_spect_clk_en(void)
+{
+    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_SRC_ADDR) |= SOC_CTRL_STEALED_CLK_SPECT;
+}
+
+void soc_ctrl_stealed_cpb_clk_en(void)
+{
+    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_SRC_ADDR) |= SOC_CTRL_STEALED_CLK_CPB;
+}
+
+void soc_ctrl_pwr_on(u32 bits)
+{
+    _SOC_CTRL_REG_PTR(SOC_CTRL_PWR_ENA_ADDR) |= bits;
+}
+
+void soc_ctrl_pwr_off(u32 bits)
+{
+    _SOC_CTRL_REG_PTR(SOC_CTRL_PWR_ENA_ADDR) &= ~bits;
+}
+
+void soc_ctrl_reset(u32 bits)
+{
+    _SOC_CTRL_REG_PTR(SOC_CTRL_UTRESET_ADDR) = bits;
+}
+
+void soc_ctrl_sleep_prepare(void)
+{
+    // Enable OSC wakeup from SPI interface (Write any data)
+    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_CFG_ADDR) |= SOC_CTRL_CLK_CFG_SCK_NREQ_EN_MASK;
+
+    // BACK up current state of interrupt enable of Serial subsystem
+    _ss_int_en_bak = PTR32_T(SS_REG_MAP_BASE_ADDR + SS_INT_EN_ADDR);
+    
+    // Disable Serial Subsystem interrupts to avoid premature Interrupt execution when system wakes up.
+    PTR32_T(SS_REG_MAP_BASE_ADDR + SS_INT_EN_ADDR) = 0;
+}
+
+void soc_ctrl_sleep_enter(void)
+{
+    // Going to sleep by disabling OSC 
+    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_CFG_ADDR) &= ~SOC_CTRL_CLK_CFG_OSCEN_MASK;
+
+    // Trap loop (System will have a few more clock cycles to live)
+    while (PTR32_T(SS_REG_MAP_BASE_ADDR + SS_STATUS_ADDR) & SS_STATUS_NREQN_MASK)
+        ;
+}
+
+void soc_ctrl_sleep_leave(void)
+{
+    // Set back the clock enable (OSC en is currently driven by SS NREQ signal)
+    // If not set back to one system would loose the OSC while another SPI transfer would be in progress
+    _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_CFG_ADDR) |= SOC_CTRL_CLK_CFG_OSCEN_MASK;
+
+    // Recover the Serial Subsystem Int enable
+    PTR32_T(SS_REG_MAP_BASE_ADDR + SS_INT_EN_ADDR) = _ss_int_en_bak;
+}
+
+void soc_ctrl_sleep_mode(void)
+{
+    soc_ctrl_sleep_prepare();
+    soc_ctrl_sleep_enter();
+    // here it continue after interrupt from serial subsystem
+    soc_ctrl_sleep_leave();
+}
+
+void soc_ctrl_deep_sleep(void)
+{
+    _SOC_CTRL_REG_PTR(SOC_CTRL_PWR_ENA_ADDR) |= SOC_CTRL_PWR_ENA_PM_ON_CLR_MASK ;
+    // code should never continue here
+}
+

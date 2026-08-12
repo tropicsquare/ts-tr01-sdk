@@ -1,0 +1,25 @@
+global {
+	base_address = 0x00200000
+}
+
+///////////////////////////////////////////////////////////////////////////////
+// Latex output parameters
+///////////////////////////////////////////////////////////////////////////////
+output tslatexdoc {
+	add_latex_preamble 	  = false 		// Add LaTex pre-amble (stand-alone document)
+	add_latex_reg_summary = true        // Add register summary table on top
+	add_hyperlinks		  = true		// hyperlinks from register tables to field tables
+	add_absolute_addresses = true
+}
+	
+///////////////////////////////////////////////////////////////////////////////
+// C Header output parameters
+///////////////////////////////////////////////////////////////////////////////
+output cheader {
+    generate_memory_map 		  = true         // Add address names and registers under enum structure
+    generate_bitfield 			  = true         // Add registers and addresses as define macros
+    generate_block_id_prefix 	  = true         // Prepend register names with block name
+	generate_register_name_prefix = true
+	add_pos_for_bitfields 		  = true
+	add_enums_for_field_values 	  = true		 // Add enums for permissible values for fields
+}
