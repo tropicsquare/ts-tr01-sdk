@@ -16,8 +16,10 @@
 
 LOG_DEF("MSG");
 
-#define _MSG_ERR_RX_LEN 1
+#define _MSG_ERR_RX_LEN_1 1
 #define _MSG_ERR_CRC 2
+#define _MSG_ERR_TX_LEN 3
+#define _MSG_ERR_RX_LEN_2 4
 
 /** @brief Buffer for incoming message. */
 static msg_t _msg_rx;
@@ -71,7 +73,7 @@ static void _msg_rx_byte(u8 rx_byte)
         if (rx_byte  > TS_L2_MAX_LEN_DATA)
         {
             _rx_status = RX_ERROR_LEN;
-            LOG_ERROR_NUM(_MSG_ERR_RX_LEN);
+            LOG_ERROR_NUM(_MSG_ERR_RX_LEN_1);
             return;
         }
 
@@ -85,7 +87,17 @@ static void _msg_rx_byte(u8 rx_byte)
         break;
 
     case RX_DATA:
-        OS_ASSERT(rx_cnt < sizeof(_msg_rx.data));
+        if (rx_cnt >= sizeof(_msg_rx.data))
+        {   // The RX_LEN case above bounds _msg_rx.len by sizeof(_msg_rx.data), so this
+            // is not a protocol case but corruption or a fault. It must not be an
+            // OS_ASSERT: this runs in the SPI IRQ, and os_alarm() called from an ISR
+            // leaves the interrupts masked for the whole alarm cleanup (see os.h). So
+            // drop the frame and let the main loop enter the alarm with interrupts on.
+            _rx_status = RX_ERROR_LEN;
+            LOG_ERROR_NUM(_MSG_ERR_RX_LEN_2);
+            os_alarm_isr();
+            return;
+        }
 
         _msg_rx.data[rx_cnt] = rx_byte;
         crc_calc = crc16_byte(rx_byte, crc_calc);
@@ -121,7 +133,7 @@ static void _msg_rx_byte(u8 rx_byte)
     _rx_status++;
 }
 
-static ts_bool _msg_tx_fetch_word(u32 *dest)
+static TS_CHECK_RETVAL ts_bool _msg_tx_fetch_word(u32 *dest)
 {   // tx callback called from SPI IRQ
     // fetch one 32 bit word
     msg_tx_stream_t *stream = &_tx_stream;
@@ -216,27 +228,28 @@ msg_t *msg_get_rx_buffer(void)
 
 ts_bool msg_tx_send(msg_t *msg)
 {
-    u16 crc_calc = 0;
-    u8 *pdata;
-    u32 len;
-
-    OS_SANITY_NULL(msg);
+    // OS_ASSERT, not OS_SANITY_NULL: with OS_SANITY_DISABLE=1 the check would vanish and both
+    // msg->len and the memcpy source below would come from address 0, which is readable ROM on
+    // this part (ivt/irom) - so instead of faulting we would clock ROM content out over SPI
+    OS_ASSERT(msg != NULL);
 
     if (msg->len > TS_L2_MAX_LEN_DATA)
-    {
+    {   // an oversized message would overflow _tx_stream.data into the IRQ-shared ptr/len,
+        // so nothing is queued; log it here to cover all call sites at once
+        LOG_ERROR_NUM(_MSG_ERR_TX_LEN);
         return TS_FALSE;
     }
 
     // prepare data to u32 optimized buffer
     _tx_stream.ptr = 0;
-    pdata =  (u8 *)_tx_stream.data;
+    u8 *pdata =  (u8 *)_tx_stream.data;
     pdata[TS_L2_IDX_HDR] = msg->hdr;
     pdata[TS_L2_IDX_LEN] = msg->len;
     memcpy(pdata + TS_L2_IDX_DATA, msg->data, msg->len);
 
-    len = TS_L2_IDX_DATA+msg->len;
+    u32 len = TS_L2_IDX_DATA+msg->len;
      
-    crc_calc = crc16(pdata, len);
+    u16 crc_calc = crc16(pdata, len);
 
     // add CRC as little endian
     pdata[len++] = crc_calc & 0xFF;

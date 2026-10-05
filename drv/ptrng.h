@@ -42,7 +42,7 @@ void ptrng_init_app(void);
  * @returns TS_TRUE - if the startup procedure of the PTRNG was successful,
  *          if TS_FALSE is returned, the PTRNG ouput cannot be used.
  */
-ts_bool ptrng_startup_test(ptrng_address_e ptrng, u32 public_parameter);
+ts_bool ptrng_startup_test(ptrng_address_e ptrng, u32 public_parameter) TS_CHECK_RETVAL;
 
 /**
  * @brief Turns on selected PTRNG without startup procedure.
@@ -67,7 +67,7 @@ void ptrng_suspend(ptrng_address_e ptrng);
  * @returns TS_TRUE - if no alarm of the online tests has been raised,
  *          TS_FALSE if an alarm has been raised - in such scenario, the output of the PTRNG cannot be used.
  */
-ts_bool ptrng_read(ptrng_address_e ptrng, u8 *dest, size_t len);
+ts_bool ptrng_read(ptrng_address_e ptrng, u8 *dest, size_t len) TS_CHECK_RETVAL;
 
 /**
  * @brief Sets the T2D data access mode.

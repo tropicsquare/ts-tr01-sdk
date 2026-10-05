@@ -45,7 +45,7 @@ LOG_DEF("SCNTR");
 static u64 _sensors_enabled;
 
 /** @brief Mask of sensors caused memory */
-static u64 _alarm_memory;
+static volatile u64 _alarm_memory;
 
 /**
  * @brief Configure shield IP as in Shield specification.
@@ -94,9 +94,7 @@ static void _sec_cntr_assert_configured(void)
   #define CONFIG_CHECK_MASK ~(SEC_CNTR_CONFIG_GPEN_MASK | SEC_CNTR_CONFIG_PES_MASK)
     OS_ASSERT((_SEC_CNTR_REG_READ(SEC_CNTR_CONFIG_ADDR) & CONFIG_CHECK_MASK) == tmp);
 
-    u64 channels;
-
-    channels =  _SEC_CNTR_REG_READ(SEC_CNTR_ALARM_UNMASK_2_ADDR);
+    u64 channels = _SEC_CNTR_REG_READ(SEC_CNTR_ALARM_UNMASK_2_ADDR);
     channels <<= 32;
     channels += _SEC_CNTR_REG_READ(SEC_CNTR_ALARM_UNMASK_1_ADDR);
 
@@ -214,9 +212,7 @@ void sec_cntr_init(const sec_cntr_config_t *config)
 
 void sec_cntr_init_app(void)
 {
-    u64 channels;
-
-    channels =  _SEC_CNTR_REG_READ(SEC_CNTR_ALARM_UNMASK_2_ADDR);
+    u64 channels = _SEC_CNTR_REG_READ(SEC_CNTR_ALARM_UNMASK_2_ADDR);
     channels <<= 32;
     channels += _SEC_CNTR_REG_READ(SEC_CNTR_ALARM_UNMASK_1_ADDR);
 
@@ -236,6 +232,11 @@ void sec_cntr_set_active_sensors(u64 channels)
     // Enable alarm interrupts and allow sensors to fire alarm channel
     sec_cntr_configure_interrupts(channels);
     sec_cntr_configure_unmask(channels);
+}
+
+u64 sec_cntr_get_active_sensors(void)
+{
+    return _sensors_enabled;
 }
 
 
@@ -364,7 +365,7 @@ void sec_cntr_lc_provision(u32 provision_val)
     _SEC_CNTR_REG_WRITE(SEC_CNTR_PROVISION_CTRL_ADDR, _PROVISION_CTRL_SEQ3);
 
     // Active wait till done, no need to sleep ...
-    u32 tmp;
+    u32 tmp = 0;
     do {
         tmp = _SEC_CNTR_REG_READ(SEC_CNTR_STATUS_ADDR);
     } while (FIELD_GET(SEC_CNTR_STATUS_PRINPR_MASK, tmp));

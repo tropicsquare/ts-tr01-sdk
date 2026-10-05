@@ -40,7 +40,7 @@ void scramble_shuffle(u8 *sequence, size_t n, const u8 *seed);
  * @param[in] n Number of valid items in sequence (bytes).
  * @return The value suitable for register content.
  */
-u32 scramble_value(const u8 *sequence, size_t n);
+u32 scramble_value(const u8 *sequence, size_t n) TS_CHECK_RETVAL;
 
 /**
  * @brief Get the final scrambling value in reversed order of nibbles.
@@ -51,7 +51,7 @@ u32 scramble_value(const u8 *sequence, size_t n);
  * @param[in] n Number of valid items in sequence (bytes).
  * @return The value suitable for register content.
  */
-u32 scramble_value_reversed(const u8 *sequence, size_t n);
+u32 scramble_value_reversed(const u8 *sequence, size_t n) TS_CHECK_RETVAL;
 
 #endif // ! SCRAMBLE_H
 

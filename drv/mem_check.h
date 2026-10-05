@@ -28,7 +28,7 @@ void fill_mem_32(size_t base, size_t size, u32 value);
  * @param value Value to expect in each address
  * @returns True - If all addresses contain expected value, False otherwise
  */
-bool check_mem_32(size_t base, size_t size, u32 value);
+bool check_mem_32(size_t base, size_t size, u32 value) TS_CHECK_RETVAL;
 
 /**
  * @brief Test memory by access with 8 bit values.
@@ -38,7 +38,7 @@ bool check_mem_32(size_t base, size_t size, u32 value);
  * @param value Value to write to each address
  * @param prev_value Previous value of each memory word!
  */
-bool test_mem_8(size_t base, size_t size, uint8_t value, u32 prev_value);
+bool test_mem_8(size_t base, size_t size, uint8_t value, u32 prev_value) TS_CHECK_RETVAL;
 
 /**
  * @brief Test memory by access with 16 bit values.
@@ -48,6 +48,6 @@ bool test_mem_8(size_t base, size_t size, uint8_t value, u32 prev_value);
  * @param value Value to write to each address
  * @param prev_value Previous value of each memory word!
  */
-bool test_mem_16(size_t base, size_t size, uint16_t value, u32 prev_value);
+bool test_mem_16(size_t base, size_t size, uint16_t value, u32 prev_value) TS_CHECK_RETVAL;
 
 #endif // ! MEM_CHECK_H

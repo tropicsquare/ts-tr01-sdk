@@ -26,13 +26,12 @@ void fill_mem_32(size_t base, size_t size, u32 value)
 
 bool check_mem_32(size_t base, size_t size, u32 value)
 {
-    u32 read_value = 0;
     bool ret_val = true;
 
     // Iterates each word
     for (size_t i = 0; i < size / sizeof(u32); i++)
     {
-        read_value = PTR32_T(OFFSET_IO(base, i));
+        u32 read_value = PTR32_T(OFFSET_IO(base, i));
         if (read_value != value)
         {
             ret_val = false;

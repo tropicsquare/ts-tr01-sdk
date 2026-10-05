@@ -9,12 +9,28 @@ stages:
 
 
 ###################################################################################################
+# Job trigger policy
+#
+# Declared once and shared via `extends:` so it cannot drift between jobs.
+# A job with neither `rules:` nor `only:` defaults to `only: [branches, tags]`,
+# which is excluded from merge request pipelines -- that is how `unit_tests`
+# silently stopped running in MRs while every other job opted in by hand.
+#
+# `github_mirror` is deliberately NOT covered here; it keeps its own
+# `only: - public` trigger.
+###################################################################################################
+.mr_and_default_branch:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+
+###################################################################################################
 # Build
 ###################################################################################################
 build_sdk_umc55:
+  extends: .mr_and_default_branch
   stage: test
-  only:
-    - merge_requests
   tags:
     - shell
   script:
@@ -30,55 +46,40 @@ build_sdk_umc55:
 ###################################################################################################
 # Unit tests (Ceedling/CMock)
 # Compiled and run on the host (no RISC-V toolchain required).
-# Uses mise to install Ruby without root if system Ruby is too old.
 ###################################################################################################
 unit_tests:
+  extends: .mr_and_default_branch
   stage: test
   tags:
     - shell
   script:
     - |
-      if ! ruby -e 'exit(RUBY_VERSION >= "2.6.0" ? 0 : 1)' 2>/dev/null; then
-        curl https://mise.run | sh
-        MISE_LOG_LEVEL=error MISE_RUBY_COMPILE=0 ~/.local/bin/mise install ruby@3.2 -y
-        export PATH="$(~/.local/bin/mise where ruby@3.2)/bin:$PATH"
-      fi
-      gem install ceedling --no-document
-      cd tests && ceedling test:all
+      source setup_env
+      cd tests
+      ceedling clobber  # deletes old data
+      ceedling test:all
 
 
 ###################################################################################################
 # Static analysis (CodeChecker)
 #
-# `CodeChecker check` exits 2 when any finding is reported. We swallow
-# that with `|| true` so the export steps always run; `CodeChecker
-# parse -e html` is the gate — it exits 2 on findings, which fails the
-# job and (since allow_failure is not set) the pipeline.
+# `CodeChecker check` exits 2 when any finding is reported. The wrapper's
+# `--gen-reports` mode exports both reports, then returns that status as the
+# job result so findings remain the quality gate.
 #
-# `parse -e codeclimate` produces a Code Climate JSON consumed by
-# GitLab's `reports.codequality` artifact, which surfaces findings
-# inline on the MR diff. It is run *before* the html gate with `|| true`
-# so its exit code does not race the gate; the JSON file is written
-# before parse exits regardless of finding count, and `when: always`
-# uploads both artifacts on failed runs so reviewers can inspect
-# findings from the MR page.
+# The Code Climate JSON is consumed by GitLab's `reports.codequality`
+# artifact, which surfaces findings inline on the MR diff. `when: always`
+# uploads both artifacts on failed runs so reviewers can inspect findings
+# from the MR page.
 ###################################################################################################
 static_analysis:
+  extends: .mr_and_default_branch
   stage: test
-  only:
-    - merge_requests
-    - master
   tags:
     - shell
   script:
     - source ./setup_env
-    - CodeChecker check
-        -b "./scripts/codechecker/codechecker_build.sh"
-        --config ./scripts/codechecker/codechecker_config.yml
-        || true
-    - CodeChecker parse -e codeclimate ./.codechecker/reports -o ./.codechecker/reports.json
-        --trim-path-prefix "$CI_PROJECT_DIR/" || true
-    - CodeChecker parse -e html ./.codechecker/reports -o ./.codechecker/reports_html
+    - ./scripts/codechecker/codechecker_run.sh --gen-reports
   artifacts:
     when: always
     paths:
@@ -109,10 +110,8 @@ static_analysis:
 #     own credentials).
 ###################################################################################################
 verify_lib_nonpublic_binaries:
+  extends: .mr_and_default_branch
   stage: test
-  only:
-    - merge_requests
-    - master
   tags:
     - shell
   script:

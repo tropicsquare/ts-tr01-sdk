@@ -14,6 +14,23 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+/**
+ * @brief Requires callers to check the function return value.
+ *
+ * Emits a compiler warning when the annotated function result is discarded.
+ */
+#define TS_CHECK_RETVAL __attribute__((warn_unused_result))
+
+/**
+ * @brief Explicitly discard a function result marked warn_unused_result.
+ *
+ * @param expression Function call whose result is intentionally ignored.
+ */
+#define TS_IGNORE_RESULT(expression) \
+	do { \
+		__typeof__(expression) ignored_result __attribute__((unused)) = (expression); \
+	} while (0)
+
 typedef char        ascii;
 
 typedef int8_t      s8;

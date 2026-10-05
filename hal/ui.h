@@ -12,7 +12,13 @@
 #include "common.h"
 #include "msg.h"
 
-typedef ts_bool (*ui_callback_t) (msg_t *msg);
+/**
+ * @brief Handler of a received L2 packet.
+ *
+ * @note The handler answers the host itself (via ui_response() or ui_resend()),
+ *       so there is no result left for ui_task() to act on.
+ */
+typedef void (*ui_callback_t) (msg_t *msg);
 
 /**
  * @brief Module main init.
@@ -44,14 +50,14 @@ void ui_response_async(msg_t *msg);
  *
  * @returns TS_TRUE when resend needed and cant send new chunk
  */
-ts_bool ui_response_async_blocked(void);
+ts_bool ui_response_async_blocked(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Request to resend last L2 response.
  *
  * @returns TS_TRUE when resend was successful.
  */
-ts_bool ui_resend(void);
+ts_bool ui_resend(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Read-and-clear the "a RESEND_REQ was just served" flag.
@@ -62,7 +68,7 @@ ts_bool ui_resend(void);
  *
  * @returns TS_TRUE if a resend was served since the last call.
  */
-ts_bool ui_resend_served(void);
+ts_bool ui_resend_served(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Tell the UI layer whether an L3 result stream is mid-flight.
@@ -80,13 +86,13 @@ void ui_set_stream_active(ts_bool active);
  *
  * @returns TS_TRUE when no receiving in progress.
  */
-ts_bool ui_idle(void);
+ts_bool ui_idle(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Check if all communication is done.
  * @returns TS_TRUE when no receiving or transmitting in progress.
  */
-ts_bool ui_done(void);
+ts_bool ui_done(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Main module task which has to be called regularly.

@@ -21,11 +21,9 @@ static void _add(char **dest, const char *limit, char ch)
     }
 }
 
-static int ll_vsnprintf(char *buffer, size_t bufsz, char const *format, va_list vlist)
+static TS_CHECK_RETVAL int ll_vsnprintf(char *buffer, size_t bufsz, char const *format, va_list vlist)
 {   // very limited printf implementation
     // we have very limited sources
-    char *limit;
-
     OS_SANITY_NULL(buffer);
     OS_SANITY_NULL(format);
 
@@ -34,7 +32,7 @@ static int ll_vsnprintf(char *buffer, size_t bufsz, char const *format, va_list 
         return 0;
     }
     bufsz--; // keep space for ending character '\0'
-    limit = buffer + bufsz;
+    char *limit = buffer + bufsz;
     while (*format)
     {
         if (*format == '%')
@@ -42,10 +40,14 @@ static int ll_vsnprintf(char *buffer, size_t bufsz, char const *format, va_list 
             format++;
 
             while ((*format >= '0') && (*format <= '9'))
+            {
                 format++; // skip unsupported width specifiers
+            }
 
             if (*format == 'l')
+            {
                 format++;
+            }
 
             switch (*format)
             {
@@ -88,22 +90,27 @@ static int ll_vsnprintf(char *buffer, size_t bufsz, char const *format, va_list 
                     {
                         u32 val = va_arg(vlist, int);
                         u32 mask = 0xF0000000;
-                        int i;
+                        int i = 0;
                         
                         for (i=0; i<7; i++)
                         {
                             if (val & mask)
+                            {
                                 break;
+                            }
                             val <<= 4;
                         }
                         for (; i<8; i++)
                         {
-                            int n = (val >> 28) & 0xF;
+                            u32 n = (val >> 28) & 0xF;
                             if (n > 9)
+                            {
                                 _add(&buffer, limit, (char)('a' + n - 10));
-
+                            }
                             else
+                            {
                                 _add(&buffer, limit, (char)('0' + n));
+                            }
                             val <<= 4;
                         }
                     }
@@ -129,7 +136,11 @@ static char _print_buf[_PRINT_BUF_SIZE];
 
 int xsnprintf(char *buffer, size_t bufsz, char const *fmt, ...) 
 {
-    va_list val;
+    // By design in the C standard, the opaque va_list type must solely be 
+    // initialized by va_start(). Manually initializing it (e.g., = {0}) is 
+    // semantically incorrect. The NOLINT suppresses a false positive from 
+    // clang-tidy's generalized variable initialization rule.
+    va_list val; // NOLINT(cppcoreguidelines-init-variables)
     va_start(val, fmt);
     int const rv = _VSNPRINTF(buffer, bufsz, fmt, val);
     va_end(val);
@@ -146,7 +157,11 @@ int xvprintf(char const *fmt, va_list val)
 
 int xprintf(char const *fmt, ...)
 {
-    va_list val;
+    // By design in the C standard, the opaque va_list type must solely be 
+    // initialized by va_start(). Manually initializing it (e.g., = {0}) is 
+    // semantically incorrect. The NOLINT suppresses a false positive from 
+    // clang-tidy's generalized variable initialization rule.
+    va_list val; // NOLINT(cppcoreguidelines-init-variables)
     va_start(val, fmt);
     int const rv = _VSNPRINTF(_print_buf, sizeof(_print_buf), fmt, val);
     va_end(val);

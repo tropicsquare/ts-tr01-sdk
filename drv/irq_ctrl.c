@@ -63,14 +63,13 @@ __attribute__((weak)) void irq_exception_handler(void)
     // 11   Environment call from M-Mode (ECALL)
 
     // Read the mcause CSR register
-    u32 mcause;
+    u32 mcause = 0;
     asm volatile ("csrr %0, mcause" : "=r" (mcause));
 
     LOG_ERROR_NUM(_IRQ_ERR_EXCEPTION | mcause);
 
     os_alarm_isr();
-    while (1)
-        ;
+    while (1) {}
 }
 
 __attribute__((weak)) void irq_nm_handler(void)
@@ -109,13 +108,11 @@ __attribute__((weak)) void irq_nm_handler(void)
 
 void irq_periph_init(void)
 {
-    u32 tmp;
-
     // IRQ_0: Serial Subsystem (Request and Response Queue, full, empty, watermarks)
-    tmp = FIELD_PREP(IRQ_CTRL_INT_MAP_1_MAP_0_MASK, MAP_IRQ_0) |
-          FIELD_PREP(IRQ_CTRL_INT_MAP_1_MAP_1_MASK, MAP_IRQ_0) |
-          FIELD_PREP(IRQ_CTRL_INT_MAP_1_MAP_2_MASK, MAP_IRQ_0) |
-          FIELD_PREP(IRQ_CTRL_INT_MAP_1_MAP_3_MASK, MAP_IRQ_0);
+    u32 tmp = FIELD_PREP(IRQ_CTRL_INT_MAP_1_MAP_0_MASK, MAP_IRQ_0) |
+              FIELD_PREP(IRQ_CTRL_INT_MAP_1_MAP_1_MASK, MAP_IRQ_0) |
+              FIELD_PREP(IRQ_CTRL_INT_MAP_1_MAP_2_MASK, MAP_IRQ_0) |
+              FIELD_PREP(IRQ_CTRL_INT_MAP_1_MAP_3_MASK, MAP_IRQ_0);
 
     _IRQ_CTRL_REG_WRITE(IRQ_CTRL_INT_MAP_1_ADDR, tmp);
 

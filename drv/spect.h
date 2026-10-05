@@ -97,7 +97,7 @@ typedef u8 spect_op_id_t;
  *
  * @returns TS_FALSE if some misbehaviour detected, TS_TRUE otherwise
  */
-ts_bool spect_init(void);
+ts_bool spect_init(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Initialize scrambling as rubbish for SPECT.
@@ -149,13 +149,13 @@ void spect_cpb_op_init(spect_op_id_t op_id, size_t size);
  * @param[in] op_id SPECT_OP_ID_* value
  * @param[in] size Data size for the operation
  */
-ts_bool spect_cpb_op_task(spect_op_id_t op_id, size_t size);
+ts_bool spect_cpb_op_task(spect_op_id_t op_id, size_t size) TS_CHECK_RETVAL;
 
 /**
  * @brief Read one u32 word from DRAM OUT memory.
  * @param[in] offset Number of bytes offset to begin.
  */
-u32  spect_read_dram_out_u32(u32 offset);
+u32  spect_read_dram_out_u32(u32 offset) TS_CHECK_RETVAL;
 
 
 /**
@@ -193,28 +193,28 @@ void spect_write_fw(u32 offset, const u32 *data, size_t len);
  * @brief Wait for SPECT operation done and dont mind the result.
  * Uses default maximal timeout.
  */
-ts_bool spect_wait_op_done(void);
+ts_bool spect_wait_op_done(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Wait for SPECT operation done and check resul SPECT_OP_OK
  * Uses default maximal timeout.
  */
-ts_bool spect_wait_done(void);
+ts_bool spect_wait_done(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Read the result code when operation finished.
  */
-spect_result_code_t spect_result_code(void);
+spect_result_code_t spect_result_code(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Read the size of result when operation finished.
  */
-size_t spect_result_size(void);
+size_t spect_result_size(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Return physical address where to store SPECT firmware.
  */
-u32 *spect_address(void);
+u32 *spect_address(void) TS_CHECK_RETVAL;
 
 /*******************************************************
  * API for TASSIC Top verification. Do not remove!
@@ -224,8 +224,8 @@ u32 *spect_address(void);
  * @warning Do not remove!
  */
 ///@{
-ts_bool spect_get_done_flag(void);
-ts_bool spect_get_error_flag(void);
+ts_bool spect_get_done_flag(void) TS_CHECK_RETVAL;
+ts_bool spect_get_error_flag(void) TS_CHECK_RETVAL;
 ///@}
 
 #endif // ! SPECT_H

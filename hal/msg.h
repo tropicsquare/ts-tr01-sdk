@@ -48,35 +48,35 @@ void msg_clear(msg_t *msg);
  *
  * @returns TS_TRUE if RX is idle, TS_FALSE otherwise.
  */
-ts_bool msg_rx_idle(void);
+ts_bool msg_rx_idle(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Check if RX has completed message reception.
  *
  * @returns TS_TRUE if message reception is done, TS_FALSE otherwise.
  */
-ts_bool msg_rx_done(void);
+ts_bool msg_rx_done(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Check if the last received message was received correctly.
  *
  * @returns TS_TRUE if message passed all validation checks.
  */
-ts_bool msg_rx_ok(void);
+ts_bool msg_rx_ok(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Check if the last received message has a CRC error.
  *
  * @returns TS_TRUE if CRC error detected, TS_FALSE otherwise.
  */
-ts_bool msg_rx_crc_error(void);
+ts_bool msg_rx_crc_error(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Check if the last received message has a length error.
  *
  * @returns TS_TRUE if message length is invalid, TS_FALSE otherwise.
  */
-ts_bool msg_rx_len_error(void);
+ts_bool msg_rx_len_error(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Get RX buffer for received messages.
@@ -85,7 +85,7 @@ ts_bool msg_rx_len_error(void);
  *
  * @returns Pointer to buffer for RX messages.
  */
-msg_t *msg_get_rx_buffer(void);
+msg_t *msg_get_rx_buffer(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Reset the RX logic and clear any in-progress reception.
@@ -99,7 +99,7 @@ void msg_rx_reset(void);
  *
  * @returns TS_TRUE if TX is idle, TS_FALSE otherwise.
  */
-ts_bool msg_tx_is_idle(void);
+ts_bool msg_tx_is_idle(void) TS_CHECK_RETVAL;
 
 #define msg_tx_idle msg_tx_is_idle // backward compatibility support
 
@@ -111,6 +111,6 @@ ts_bool msg_tx_is_idle(void);
  * @param msg Pointer to the message to send.
  * @returns TS_TRUE if the message was queued successfully.
  */
-ts_bool msg_tx_send(msg_t *msg);
+ts_bool msg_tx_send(msg_t *msg) TS_CHECK_RETVAL;
 
 #endif // ! MSG_H

@@ -13,13 +13,13 @@
 #include "arch.h"
 #include "xprintf.h"
 
-#define OS_PRINTF( ... ) xprintf(__VA_ARGS__)
+#define OS_PRINTF( ... ) TS_IGNORE_RESULT(xprintf(__VA_ARGS__))
 
 void os_init(void);
 typedef u32 os_timer_t;
 void os_timer_init(void);
 
-extern u32 timer1_get_time(void);
+extern u32 timer1_get_time(void) TS_CHECK_RETVAL;
 #define os_timer_get_time timer1_get_time
 
 #define OS_TIMER() os_timer_get_time()
@@ -151,7 +151,7 @@ typedef ts_bool (*os_wait_for_pfunc_t)(void);
  * @param[in] condition Pointer to 'os_wait_for_pfunc_t' type function.
  * @param[in] timeout_us Timeout for condition to be met.
  */
-ts_bool os_wait_for(os_wait_for_pfunc_t condition, u32 timeout_us);
+ts_bool os_wait_for(os_wait_for_pfunc_t condition, u32 timeout_us) TS_CHECK_RETVAL;
 
 /**
  * @brief Wait for some condition to be TS_TRUE.

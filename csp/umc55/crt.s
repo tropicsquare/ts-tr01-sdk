@@ -57,6 +57,17 @@ jal x0, irq_nm_handler
 ###############################################################################
 .global _reset_vector
 _reset_vector:
+# Disable maskable interrupts before touching any register. The bootloader
+# jumps here with a plain call, leaving MSTATUS[MIE]=1, MIE populated and
+# MTVEC still pointing at its own IVT; an interrupt taken during the
+# initialization below would dispatch through the bootloader's IVT while SP
+# is zeroed, corrupting low memory and clobbering the registers used to set
+# up MTVEC and the stack.
+# NMI and synchronous exceptions are not maskable and are not covered here.
+# Interrupts are re-enabled by irq_periph_init(), reached from main() via
+# os_init().
+    csrci mstatus, 0x8 # disable global interrupts
+    csrw mie, zero     # clear interrupt mask
 # Initialize all registers to zero
 _init_gprs:
     mv x1, x0

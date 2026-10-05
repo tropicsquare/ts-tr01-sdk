@@ -95,7 +95,7 @@ void scb_wakeup(void);
  * @param step Step number.
  * @return True if step completed successfully, false otherwise.
  */
-ts_bool scb_handshake_step(scb_handshake_context_t *ctx, scb_handshake_step_e step);
+ts_bool scb_handshake_step(scb_handshake_context_t *ctx, scb_handshake_step_e step) TS_CHECK_RETVAL;
 
 /**
  * @brief Reads authentication tag.
@@ -151,7 +151,7 @@ void scb_nonce_clear(void);
  * @brief Retrieves the current nonce value.
  * @return The current nonce value.
  */
-u32 scb_nonce_get(void);
+u32 scb_nonce_get(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Performs a SHA-256 round.
@@ -173,8 +173,8 @@ void scb_sha256_read(u8 hash[SCB_HASH_SIZE]);
  */
 ///@{
 void scb_tstwrp_set_comp_data(u8 *data);
-bool scb_tstwrp_process_op(u32 op);
-bool scb_tstwrp_mov_data_in(u8 dest);
+void scb_tstwrp_process_op(u32 op);
+void scb_tstwrp_mov_data_in(u8 dest);
 ///@}
 
 

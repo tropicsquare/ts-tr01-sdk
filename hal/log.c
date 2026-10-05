@@ -34,10 +34,10 @@ void log_msg(const ascii *type, const ascii *id, const ascii *fmt, ... )
     va_start(args, fmt);
 
     _log_timestamp();
-    xprintf("%s(%s): ", type, id);
-    xvprintf(fmt, args);
+    TS_IGNORE_RESULT(xprintf("%s(%s): ", type, id));
+    TS_IGNORE_RESULT(xvprintf(fmt, args));
     va_end(args);
-    xprintf(NL);
+    TS_IGNORE_RESULT(xprintf(NL));
 
     OS_FLUSH();
 }
@@ -56,11 +56,11 @@ void log_dump(const ascii *id, const ascii *text, const u8 *data, size_t data_le
     OS_SANITY_NULL(data);
 
     _log_timestamp();
-    xprintf("X(%s) %s:", id, text);
+    TS_IGNORE_RESULT(xprintf("X(%s) %s:", id, text));
     
     if (data_len > 512)
     {
-        xprintf("(%d)", data_len);
+        TS_IGNORE_RESULT(xprintf("(%d)", data_len));
         data_len = 512;
     }
 
@@ -69,7 +69,7 @@ void log_dump(const ascii *id, const ascii *text, const u8 *data, size_t data_le
 
     while (data_len--)
     {
-        xprintf(" %x%x", *data >> 4, *data & 0xf);
+        TS_IGNORE_RESULT(xprintf(" %x%x", *data >> 4, *data & 0xf));
         data++;
         
         n++;
@@ -83,7 +83,7 @@ void log_dump(const ascii *id, const ascii *text, const u8 *data, size_t data_le
             n = 0;
         }
     }
-    xprintf(NL);
+    TS_IGNORE_RESULT(xprintf(NL));
     OS_FLUSH();
 }
 

@@ -72,8 +72,6 @@ void spi_init(spi_rx_callback_t rx_callback, spi_tx_callback_t tx_callback)
     OS_SANITY_NULL(rx_callback);
     OS_SANITY_NULL(tx_callback);
 
-    spi_ll_init(TS_CHIP_ST_STARTUP);
-
     _watermark_reset();
 
     _rx_byte = rx_callback;
@@ -86,10 +84,8 @@ void spi_init(spi_rx_callback_t rx_callback, spi_tx_callback_t tx_callback)
     // request IRQ so a stale request is dropped instead of delivered to _rx_byte.
     spi_flush_request_queue();
 
-    // enable IRQ
-    _SS_REG_WRITE(SS_INT_EN_ADDR, 0 \
-        | SS_INT_EN_REQQNETY_MASK    // request queue empty (SS_INT_STATUS_REQQNETYS_MASK)
-        );
+    // Enable 'SS Request Queue not empty' interrupt.
+    _SS_REG_WRITE(SS_INT_EN_ADDR, SS_INT_EN_REQQNETY_MASK);
 
     // By default is READY flag inactive, make it active now, when interface is ready
     spi_set_ready();
@@ -117,12 +113,12 @@ ts_bool spi_response_queue_empty(void)
     return TS_TRUE;
 }
 
-static inline ts_bool _response_queue_full(void)
+static inline TS_CHECK_RETVAL ts_bool _response_queue_full(void)
 {
     return ((_SS_REG_READ(SS_STATUS_ADDR) & SS_STATUS_RSPQFULLS_MASK) ? TS_TRUE : TS_FALSE);
 }
 
-ts_bool spi_request_queue_empty(void)
+TS_CHECK_RETVAL ts_bool spi_request_queue_empty(void)
 {
     return ((_SS_REG_READ(SS_STATUS_ADDR) & SS_STATUS_REQQNETYS_MASK) ? TS_FALSE : TS_TRUE);
 }
@@ -132,8 +128,7 @@ void spi_clear_response_queue(void)
     _tx_reset();
     _SS_REG_PTR32(SS_COMMAND_ADDR) |= SS_COMMAND_RSPQCLR_MASK;
 
-    while (_SS_REG_READ(SS_COMMAND_ADDR) & SS_COMMAND_RSPQCLR_MASK)
-        ;
+    while (_SS_REG_READ(SS_COMMAND_ADDR) & SS_COMMAND_RSPQCLR_MASK) {}
 }
 
 void spi_flush_request_queue(void)
@@ -180,11 +175,8 @@ __ISR void irq_ss_handler(void)
 {
     if (_SS_REG_READ(SS_STATUS_ADDR) & SS_STATUS_REQQNETYS_MASK)
     {   // Request Queue not empty status
-        u32 data;
-        u32 i;
-
-        data = _SS_REG_READ(SS_REQQ_POP_ADDR);
-        for (i=0; i<sizeof(u32); i++)
+        u32 data = _SS_REG_READ(SS_REQQ_POP_ADDR);
+        for (u32 i=0; i<sizeof(u32); i++)
         {
             _rx_byte(data & 0xFF);
             data >>= 8;
@@ -199,13 +191,13 @@ __ISR void irq_ss_handler(void)
     }
     while (1)
     {   // fill whole queue
-        u32 w;
 
         if (_response_queue_full() == TS_TRUE)
         {   // fifo full, postpone filling until bellow watermark 
             return;
         }
 
+        u32 w = 0;
         if (_tx_fetch_word(&w) != TS_TRUE)
         {   // end of data
             _tx_fetch_done = true;

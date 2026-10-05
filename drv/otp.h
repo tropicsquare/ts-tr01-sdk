@@ -84,7 +84,7 @@ void otp_init_scrambling(u8 *seed);
  *
  * @param[in] addr Address.
  */
-u8 otp_read_bit_field(u32 addr);
+u8 otp_read_bit_field(u32 addr) TS_CHECK_RETVAL;
 
 /**
  * @brief Write a 32-bit word into OTP memory.
@@ -106,14 +106,14 @@ void otp_write_word(u32 addr, u32 data);
  * @param[in] data 32-bit data word to be written.
  * @return `TS_TRUE` if the verification succeeds, `TS_FALSE` otherwise.
  */
-ts_bool otp_write_word_verify(u32 addr, u32 data);
+ts_bool otp_write_word_verify(u32 addr, u32 data) TS_CHECK_RETVAL;
 
 /**
  * @brief Read single word from OTP.
  *
  * @param[in] addr Address.
  */
-u32 otp_read_word(u32 addr);
+u32 otp_read_word(u32 addr) TS_CHECK_RETVAL;
 
 /**
  * @brief Read block of data from OTP.

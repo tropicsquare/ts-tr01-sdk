@@ -33,6 +33,10 @@
     - ../hal
     - ../drv
     - ../api
+    # CSP headers pulled in by the SDK drivers (pure defines / register maps)
+    - ../csp/umc55/inc                   # hw.h
+    - ../csp/umc55/tr01-c/includes/defs  # tassic_defs.h
+    - ../csp/umc55/tr01-c/includes/regs  # mbist_regs.h, soc_ctrl_regs.h
   :support:
     - test/support
     - test/support/stubs
@@ -55,7 +59,9 @@
   :verbosity: 2
   :when_no_prototypes: :warn
   :mock_prefix: 'mock_'
-  :strippables: ['(?:__attribute__\s*\([ (]*.*?[ )]*\)+)']
+  :strippables:
+    - '(?:__attribute__\s*\([ (]*.*?[ )]*\)+)'
+    - 'TS_CHECK_RETVAL'
   :attributes:
     - __ISR
     - __WEAK

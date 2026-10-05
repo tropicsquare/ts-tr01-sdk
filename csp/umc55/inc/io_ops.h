@@ -41,7 +41,7 @@
  * Offset from IO location by "num_locations" locations
  * @warning This assumes 32-bit access!
  */
-#define OFFSET_IO(base, num_locations) (((u32) (base)) + 0x4 * (num_locations))
+#define OFFSET_IO(base, num_locations) (((u32) (base)) + (0x4 * (num_locations)))
 
 /** 
  * @name  Memory space accesses

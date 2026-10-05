@@ -25,9 +25,7 @@ u8 ipc_memory[IPC_MEMORY_SIZE] __attribute__((section(".ipc")));
 
 void ipc_init(void)
 {
-    u32 i;
- 
-    for (i=0; i<sizeof(ipc_memory); i++)
+    for (u32 i=0; i<sizeof(ipc_memory); i++)
     {
         ipc_memory[i] = 0;
     }
@@ -284,9 +282,13 @@ void ipc_print_msg(const char *msg, ...)
 
     // format msg
     char formatted_msg[IPC_MAX_MSG_SIZE_BYTES];
-    va_list val;
+    // By design in the C standard, the opaque va_list type must solely be 
+    // initialized by va_start(). Manually initializing it (e.g., = {0}) is 
+    // semantically incorrect. The NOLINT suppresses a false positive from 
+    // clang-tidy's generalized variable initialization rule.
+    va_list val; // NOLINT(cppcoreguidelines-init-variables)
     va_start(val, msg);
-    xvsnprintf(formatted_msg, IPC_MAX_MSG_SIZE_BYTES, msg, val);
+    TS_IGNORE_RESULT(xvsnprintf(formatted_msg, IPC_MAX_MSG_SIZE_BYTES, msg, val));
     va_end(val);
 
     // raise CPU_BUSY flag

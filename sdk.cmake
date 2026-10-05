@@ -64,21 +64,6 @@ set(DIR_SDK_DRV    ${DIR_SDK}/drv)
 
 set(CMAKE_TOOLCHAIN_FILE ${DIR_CSP}/toolchain.cmake)
 
-# Set CPP check (linter) if available!
-FIND_PROGRAM(CPP_CHECK "cppcheck")
-if (CPP_CHECK)
-    set(CMAKE_CXX_CPPCHECK "cppcheck")
-    set(CMAKE_C_CPPCHECK "cppcheck")
-    list(
-        APPEND CMAKE_C_CPPCHECK
-            "--enable=warning"
-            "--inconclusive"
-            "--force"
-            "--inline-suppr"
-            "--quiet"
-    )
-endif()
-
 # add definitions for human readable detecting CSP version in code
 # like i.e #if (CSP_VERSION == CSP_VERSION_TR01C)
 add_definitions(
@@ -106,4 +91,4 @@ include_directories(
 )
 
 # extend CMAKE_C_FLAGS by common flags
-set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OPT} -Wall -Wextra -Werror")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OPT} -Wall -Wextra -Werror -Wcast-align=strict")

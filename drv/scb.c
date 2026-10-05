@@ -19,6 +19,7 @@
 #include "scb_regs.h"
 #include "spect.h"
 #include "io_ops.h"
+#include "util.h"
 
 #include "log.h"
 LOG_DEF("SCB");
@@ -31,20 +32,20 @@ LOG_DEF("SCB");
   #warning "SIMULATION_IO_OPS enabled"
 #endif
 
-#define _SCB_REG_WRITE(offset, value) IO_WRITE_32(TROPIC01_MEMORY_MAP_SCB_BASE_ADDR+offset, value)
-#define _SCB_REG_READ(offset) IO_READ_32(TROPIC01_MEMORY_MAP_SCB_BASE_ADDR+offset)
+#define _SCB_REG_WRITE(offset, value) IO_WRITE_32(TROPIC01_MEMORY_MAP_SCB_BASE_ADDR+(offset), value)
+#define _SCB_REG_READ(offset) IO_READ_32(TROPIC01_MEMORY_MAP_SCB_BASE_ADDR+(offset))
 
-#define FORM_OP(op, src, dst, cidr, shin, aeiv, aesl, aedr, data_size) \
-    ((op) << SCB_MODE_OP_POS)                                     |    \
-    ((src) << SCB_MODE_SRC_POS)                                   |    \
-    ((dst) << SCB_MODE_DST_POS)                                   |    \
-    ((cidr) << SCB_MODE_CIDR_POS)                                 |    \
-    ((shin) << SCB_MODE_SHIN_POS)                                 |    \
-    ((aeiv) << SCB_MODE_AEIV_POS)                                 |    \
-    ((aesl) << SCB_MODE_AESL_POS)                                 |    \
-    ((aedr) << SCB_MODE_AEDR_POS)                                 |    \
-    ((data_size) << SCB_MODE_DATA_SIZE_POS)                       |    \
-    ((_ctx.force_aes_mask) << SCB_MODE_FORCE_AES_MASK_POS)
+#define FORM_OP(op, src, dst, cidr, shin, aeiv, aesl, aedr, data_size) (\
+    ((u32)(op) << SCB_MODE_OP_POS)                                |     \
+    ((u32)(src) << SCB_MODE_SRC_POS)                              |     \
+    ((u32)(dst) << SCB_MODE_DST_POS)                              |     \
+    ((u32)(cidr) << SCB_MODE_CIDR_POS)                            |     \
+    ((u32)(shin) << SCB_MODE_SHIN_POS)                            |     \
+    ((u32)(aeiv) << SCB_MODE_AEIV_POS)                            |     \
+    ((u32)(aesl) << SCB_MODE_AESL_POS)                            |     \
+    ((u32)(aedr) << SCB_MODE_AEDR_POS)                            |     \
+    ((u32)(data_size) << SCB_MODE_DATA_SIZE_POS)                  |     \
+    ((u32)(_ctx.force_aes_mask) << SCB_MODE_FORCE_AES_MASK_POS))
 
 #define FORM_OP_MOV(src, dst)       FORM_OP(SCB_MODE_OP_MOV,    src, dst, 0, 0, 0, 0, 0, 0)
 #define FORM_OP_KRD()               FORM_OP(SCB_MODE_OP_KRD,    0, 0, 0, 0, 0, 0, 0, 0)
@@ -55,10 +56,10 @@ LOG_DEF("SCB");
 #define FORM_OP_AES_AD(aesl,size)   FORM_OP(SCB_MODE_OP_AES_AD, 0, 0, 0, 0, 0, aesl, 0, size)
 #define FORM_OP_AES_ED(aedr,size)   FORM_OP(SCB_MODE_OP_AES_ED, 0, 0, 0, 0, 0, 0, aedr, size)
 
-#define FORM_KBUS_PARAMS(kslot, ktype, koff)                \
-    ((kslot) << SCB_KBUS_PARAMS_KSLOT_POS) | \
-    ((ktype) << SCB_KBUS_PARAMS_KTYPE_POS)                | \
-    ((koff) << SCB_KBUS_PARAMS_KOFF_POS)
+#define FORM_KBUS_PARAMS(kslot, ktype, koff) (\
+    ((kslot) << SCB_KBUS_PARAMS_KSLOT_POS) |  \
+    ((ktype) << SCB_KBUS_PARAMS_KTYPE_POS) |  \
+    ((koff) << SCB_KBUS_PARAMS_KOFF_POS))
 
 
 #define _HMAC_OPAD_VALUE 0x5c // opad = 64 bytes of 0x5C
@@ -74,8 +75,8 @@ typedef struct {
     scb_handshake_context_t *hsk;
     scb_task_kind_e     task_kind;
     int                 hsk_step;
-    int                 force_aes_mask;
-    ts_bool             op_done;
+    u32                 force_aes_mask;
+    volatile ts_bool    op_done;
 } t_scb_ctx;
 
 t_scb_ctx _ctx;
@@ -125,10 +126,9 @@ static void _fill_data_in(u8 value)
 
 static void _set_sha256_data_len(size_t data_length)
 {
-    u32 tmp;
     data_length <<= 3; // convert number of bytes to number of bits
     // convert little endian u16 to BIG endian u32 (here we support max 16 bit number)
-    tmp = ((data_length & 0xFF00) << 8) + ((data_length & 0x00FF) << 24);
+    u32 tmp = ((data_length & 0xFF00) << 8) + ((data_length & 0x00FF) << 24);
     _SCB_REG_WRITE(SCB_COMP_DATA_IN_7_ADDR, tmp);
 }
 
@@ -156,15 +156,20 @@ static void _set_empty_padding(void)
 }
 
 
-static ts_bool _condition_op_done(void)
+static TS_CHECK_RETVAL ts_bool _condition_op_done(void)
 {
     return (_ctx.op_done);
 }
 
-static ts_bool _process_op(u32 op)
+/**
+ * @brief Issues command `op` to SCB and waits for its completion via `os_wait_for_critical()`.
+ * @warning Alarm is entered on timeout.
+ * @param op SCB operation/command to execute
+ */
+static void _process_op(u32 op)
 {
     _start_op(op);
-    return (os_wait_for(_condition_op_done, _SCB_DEFAULT_TIMEOUT));
+    os_wait_for_critical(_condition_op_done, _SCB_DEFAULT_TIMEOUT);
 }
 
 static void _load_data_chunk(u8 *data, size_t len)
@@ -175,8 +180,8 @@ static void _load_data_chunk(u8 *data, size_t len)
     }
     else
     {   // less than 32B of data
-        u8 buf[_SCB_REG_SIZE];
-        size_t l;
+        u8 buf[_SCB_REG_SIZE] = {0};
+        size_t l = 0;
         // copy the data
         for (l=0; l<len; l++)
         {
@@ -190,6 +195,7 @@ static void _load_data_chunk(u8 *data, size_t len)
             buf[l] = 0;
         }
         _copy_mem_to_regs(SCB_COMP_DATA_IN_0_ADDR, buf, _SCB_REG_SIZE);
+        memerase_safe(buf, sizeof(buf));
     }
 }
 
@@ -197,23 +203,24 @@ void _load_hmac_message_data(u8 *data, size_t len)
 {   // load data to RA and RB + padding
     // here will be only 3 types of 'len': 1 or 32 or 33
     if (len > (2*_SCB_REG_SIZE))
+    {
         return; // does not fit into RA + RB
+    }
 
     _load_data_chunk(data, len);
     // put first part to RA
     _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RA));
 
-    data+=_SCB_REG_SIZE;
-
     if (len == (2*_SCB_REG_SIZE))
     {
-        _copy_mem_to_regs(SCB_COMP_DATA_IN_0_ADDR, data, _SCB_REG_SIZE);
+        _copy_mem_to_regs(SCB_COMP_DATA_IN_0_ADDR, data + _SCB_REG_SIZE, _SCB_REG_SIZE);
         _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB));
         return; // no padding, data only
     }
-    else if (len >= _SCB_REG_SIZE)
+
+    if (len >= _SCB_REG_SIZE)
     {   // more than 32B of data
-        _load_data_chunk(data, len-_SCB_REG_SIZE);
+        _load_data_chunk(data + _SCB_REG_SIZE, len - _SCB_REG_SIZE);
     }
     else
     {
@@ -223,125 +230,123 @@ void _load_hmac_message_data(u8 *data, size_t len)
     _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB));
 }
 
-#define CHECK(func)  if((func) != TS_TRUE){return;}
-
 static void _step_sha(void)
 {   // HASH step 1 
     // 1. COMP_DATA_IN_* = protocol_name.
     _set_comp_data((u8*)PROTOCOL_NAME);
     // 2. OP_MOV (src = COMP_DATA_IN, dst = RA)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RA));
     // 3. COMP_DATA_IN_* = (1 << 255) ∨ sha256_padding(256)
     _set_padding_data(BITS_TO_BYTES(256));
     // 4. OP_MOV (src = COMP_DATA_IN, dst = RB)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB));
     // 5. OP_SHA(init = 1)
-    CHECK( _process_op(FORM_OP_SHA(1)));
+    _process_op(FORM_OP_SHA(1));
     // result stored in RC we use in next step
 
     // HASH step 2
     // 1. OP_MOV (src = RC, dst = RA) we use the result from previous step
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_RA));
     // 2. OP_KRD(ktype = s_hipub , kslot = PairingKeySlot, koffset = 0)
     _SCB_REG_WRITE(SCB_KBUS_PARAMS_ADDR, FORM_KBUS_PARAMS(_ctx.hsk->pkey_index, KDB_KEY_TYPE_SHIPUB, 0));
-    CHECK( _process_op(FORM_OP_KRD()));
+    _process_op(FORM_OP_KRD());
     // 3. OP_SHA(init = 1)
-    CHECK( _process_op(FORM_OP_SHA(1)));
+    _process_op(FORM_OP_SHA(1));
     // 4. COMP_DATA_IN_* = 0x80
     _set_empty_padding();
     // 5. OP_MOV (src = COMP_DATA_IN, dst = RA)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RA));
     // 6. COMP_DATA_IN_* = sha256_padding(512)
     _set_padding_data(BITS_TO_BYTES(512));
     // overwrite first word where is padding character, because we have padding character in previous block
     _SCB_REG_WRITE(SCB_COMP_DATA_IN_0_ADDR, 0);
     // 7. OP_MOV (src = COM P_DATA_IN, dst = RB)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB));
     // 8. OP_SHA(init = 0)
-    CHECK( _process_op(FORM_OP_SHA(0)));
+    _process_op(FORM_OP_SHA(0));
     // result stored in RC we use in next step
 
     // HASH step 3
     // 1. OP_MOV (src = RC, dst = RA)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_RA));
     // 2. OP_KRD(ktype = s_tpub , kslot = 0, koffset = 0)
     _SCB_REG_WRITE(SCB_KBUS_PARAMS_ADDR, FORM_KBUS_PARAMS(0, KDB_KEY_TYPE_STPUB, 0));
-    CHECK( _process_op(FORM_OP_KRD()));
+    _process_op(FORM_OP_KRD());
     // 3. OP_SHA(init = 1)
-    CHECK( _process_op(FORM_OP_SHA(1)));
+    _process_op(FORM_OP_SHA(1));
     // 4. COMP_DATA_IN_* = 0x80
     _set_empty_padding();
     // 5. OP_MOV (src = COMP_DATA_IN, dst = RA)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RA));
     // 6. COMP_DATA_IN_* = sha256_padding(512)
     _set_padding_data(BITS_TO_BYTES(512));
     // overwrite first word where is padding character, because we have padding character in previous block
     _SCB_REG_WRITE(SCB_COMP_DATA_IN_0_ADDR, 0);
     // 7. OP_MOV (src = COMP_DATA_IN, dst = RB)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB));
     // 8. OP_SHA(init = 0)
-    CHECK( _process_op(FORM_OP_SHA(0)));
+    _process_op(FORM_OP_SHA(0));
     // result stored in RC we use in next step
 
     // HASH step 4
     // 1. OP_MOV (src = RC, dst = RA)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_RA));
     // 2. COMP_DATA_IN_* = e_hpub
     _set_comp_data(_ctx.hsk->e_hpub);
     // 3. OP_MOV (src = COMP_DATA_IN, dst = RB)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB));
     // 4. OP_SHA(init = 1)
-    CHECK( _process_op(FORM_OP_SHA(1)));
+    _process_op(FORM_OP_SHA(1));
     // 5. COMP_DATA_IN_* = 0x80 0x00 ...
     _set_empty_padding();
     // 6. OP_MOV (src = COMP_DATA_IN, dst = RA)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RA));
     // 7. COMP_DATA_IN_* = sha256_padding(512)
     _set_padding_data(BITS_TO_BYTES(512));
     // overwrite first word where is padding character, because we have padding character in previous block
     _SCB_REG_WRITE(SCB_COMP_DATA_IN_0_ADDR, 0);
     // 8. OP_MOV (src = COMP_DATA_IN, dst = RB)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB));
     // 9. OP_SHA(init = 0)
-    CHECK( _process_op(FORM_OP_SHA(0)));
+    _process_op(FORM_OP_SHA(0));
     // result stored in RC we use in next step
 
     // HASH step 5
     // 1. OP_MOV (src = RC, dst = RA)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_RA));
     // 2. COMP_DATA_IN_* = PKEY_INDEX || padding
     _set_padding_data(BITS_TO_BYTES(256+8));
     // overwrite first word and update padding character
     _SCB_REG_WRITE(SCB_COMP_DATA_IN_0_ADDR, _ctx.hsk->pkey_index | (SHA256_PADDING_CHARACTER << 8));
     // 3. OP_MOV (src = COMP_DATA_IN, dst = RB)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB));
     // 4. OP_SHA(init = 1)
-    CHECK( _process_op(FORM_OP_SHA(1)));
+    _process_op(FORM_OP_SHA(1));
     // result stored in RC we use in next step
 
     // HASH step 6
     // 1. OP_MOV (src = RC, dst = RA)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_RA));
     // 2. COMP_DATA_IN_* = e_tpub
     _set_comp_data(_ctx.hsk->e_tpub);
     // 3. OP_MOV (src = COMP_DATA_IN, dst = RB)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB));
     // 4. OP_SHA(init = 1)
-    CHECK( _process_op(FORM_OP_SHA(1)));
+    _process_op(FORM_OP_SHA(1));
     // 5. COMP_DATA_IN_* = 0x80 0x00 ...
     _set_empty_padding();
     // 6. OP_MOV (src = COMP_DATA_IN, dst = RA)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RA));
     // 7. COMP_DATA_IN_* = sha256_padding(512)
     _set_padding_data(BITS_TO_BYTES(512));
     // overwrite first word where is padding character, because we have padding character in previous block
     _SCB_REG_WRITE(SCB_COMP_DATA_IN_0_ADDR, 0);
     // 8. OP_MOV (src = COMP_DATA_IN, dst = RB)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB));
     // 9. OP_SHA(init = 0)
-    CHECK( _process_op(FORM_OP_SHA(0)));
+    _process_op(FORM_OP_SHA(0));
     // 10. OP_MOV (src = RC, dst = HSK_HASH)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_HSH_HASH)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_HSH_HASH));
     // After Step 6 Secure Channel Handshake Hash can be read from HSK_HASH
     _copy_regs_to_mem((u8 *)&_ctx.hsk->hash, SCB_HSK_HASH_0_ADDR, SCB_HASH_SIZE);
     // not yet TAG ... continue HKDF :(
@@ -352,53 +357,51 @@ static void _hmac_sha256(u8 *message, size_t len)
 {   // HMAC−SHA256(K, message) = SHA256((K XOR  opad) || SHA256((K XOR ipad) || message))
     // assume 'K' is already placed in RA
     // 1. OP_MOV (src = RA, dst = RD) Backup K to RD
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RA, SCB_MODE_DST_RD)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RA, SCB_MODE_DST_RD));
     // 2. COMP_DATA_IN_* = ipad
     _fill_data_in(_HMAC_IPAD_VALUE);
     // 3. OP_XOR(src = RA, dst = RA) RA = RA XOR ipad
-    CHECK( _process_op(FORM_OP_XOR(SCB_MODE_SRC_RA, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_XOR(SCB_MODE_SRC_RA, SCB_MODE_DST_RA));
     // 4. OP_MOV (src = COMP_DATA_IN, dst = RB) RB = ipad
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB));
     // 5. OP_SHA(init = 1)
-    CHECK( _process_op(FORM_OP_SHA(1)));
+    _process_op(FORM_OP_SHA(1));
     // 6. Load 'message' and SHA256 padding to RA nad RB
     _load_hmac_message_data(message, len);
     // 7. OP_SHA(init = 0) RC = SHA256(K XOR ipad ∥ message)
-    CHECK( _process_op(FORM_OP_SHA(0)));
+    _process_op(FORM_OP_SHA(0));
     // 8. OP_MOV (src = RD, dst = RA)  Restore RD to RA
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RD, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RD, SCB_MODE_DST_RA));
     // 9. COMP_DATA_IN_* = opad
     _fill_data_in(_HMAC_OPAD_VALUE);
     // 10. OP_XOR(src = RA, dst = RA) RA = RA XOR opad
-    CHECK( _process_op(FORM_OP_XOR(SCB_MODE_SRC_RA, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_XOR(SCB_MODE_SRC_RA, SCB_MODE_DST_RA));
     // 11. OP_MOV (src = COMP_DATA_IN, dst = RB) RB = opad
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB));
     // 12. OP_MOV (src = RC, dst = RD) Backup RC (result of inner SHA) to RD
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_RD)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_RD));
     // 13. OP_SHA(init = 1)
-    CHECK( _process_op(FORM_OP_SHA(1)));
+    _process_op(FORM_OP_SHA(1));
     // 14. OP_MOV (src = RD, dst = RA) Restore RD (result of inner SHA) to RA
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RD, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RD, SCB_MODE_DST_RA));
     // 15. COMP_DATA_IN_* = {B0 = 0x80, B30 = 0x03, Others = 0x0} Padding (768 bits)
     _set_padding_data(BITS_TO_BYTES(768));
     // 16. OP_MOV (src = COMP_DATA_IN, dst = RB)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RB));
     // 17. OP_SHA(init = 0) RC = HMAC-SHA256(K, message)
-    CHECK( _process_op(FORM_OP_SHA(0)));
+    _process_op(FORM_OP_SHA(0));
     // 18. OP_MOV (src = RC, dst = RA) RA = RC
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_RA));
 }
 
-static void _hkdf(u8 *message, size_t len, int nouts)
+static void _hkdf_run(u8 tmp[SCB_KEY_SIZE + 1], u8 *message, size_t len, int nouts)
 {
-    u8 tmp[SCB_KEY_SIZE + 1];
-
     // assume RA = ck
 
     // Compute HMAC−SHA256(K = ck, m = input) RA = tmp
     _hmac_sha256(message, len);
     // OP_MOV (src = RA, dst = RE) Backup tmp to RE.
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RA, SCB_MODE_DST_RE)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RA, SCB_MODE_DST_RE));
     // Compute HMAC−SHA256(K = tmp, m = 0x01)  RA = HMAC−SHA256(tmp, 0x01)
     _hmac_sha256((u8 *)"\x01", 1);
 
@@ -409,36 +412,39 @@ static void _hkdf(u8 *message, size_t len, int nouts)
     }
     // from SCB since it is only needed as input for follow-up HKDF calculations.
     // read the output_1
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RA, SCB_MODE_DST_COMP_DATA_OUT)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RA, SCB_MODE_DST_COMP_DATA_OUT));
     _copy_regs_to_mem(tmp, SCB_COMP_DATA_OUT_0_ADDR, SCB_KEY_SIZE);
     tmp[SCB_KEY_SIZE] = 0x02; // concatenate output_1 and character 0x02
     // OP_MOV (src = RA, dst = RC) RC=output_1
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RA, SCB_MODE_DST_RC)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RA, SCB_MODE_DST_RC));
     // OP_MOV (src = RE, dst = RA) RA=tmp
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RE, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RE, SCB_MODE_DST_RA));
     // OP_MOV (src = RC, dst = RE) RE=output_1 (backup)
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_RE)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RC, SCB_MODE_DST_RE));
     // Compute HMAC−SHA256(K = tmp, m = output_1 ∥ 0x02) as in 8.4. For this
     _hmac_sha256(tmp, SCB_KEY_SIZE + 1);
     // computation tmp is now in RA and output_1 is in RE. Thus FW loading message m
     // proceeds as in the case when loading 33 byte long message. After hits computa-
     // tion RA contains output_2.
     // OP_MOV (src = RA, dst = RB) RB=output_2
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RA, SCB_MODE_DST_RB)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RA, SCB_MODE_DST_RB));
     // OP_MOV (src = RE, dst = RA) RA=output_1
-    CHECK( _process_op(FORM_OP_MOV(SCB_MODE_SRC_RE, SCB_MODE_DST_RA)));
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_RE, SCB_MODE_DST_RA));
     // result "output_1" is in RA and "output_2" in RB
 }
-#undef CHECK
+
+static void _hkdf(u8 *message, size_t len, int nouts)
+{
+    u8 tmp[SCB_KEY_SIZE + 1];
+    _hkdf_run(tmp, message, len, nouts);
+    memerase_safe(tmp, sizeof(tmp));   // always clear derived key material
+}
 
 static void _step_hkdf_1(void)
 {
     // copy 'ck' to RA as 'K'
     _copy_mem_to_regs(SCB_COMP_DATA_IN_0_ADDR, (u8 *)PROTOCOL_NAME, SCB_KEY_SIZE);
-    if (_process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RA)) != TS_TRUE)
-    {
-        return;
-    }
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, SCB_MODE_DST_RA));
     _hkdf(_ctx.hsk->x25519, SCB_KEY_SIZE, 1);
     // keep result in RA
 }
@@ -568,6 +574,12 @@ ts_bool scb_handshake_step(scb_handshake_context_t *ctx, scb_handshake_step_e st
         _LOG_DEBUG("failed, %lx, %lx", _SCB_REG_READ(SCB_STATUS_ADDR), _SCB_REG_READ(SCB_COMMAND_ADDR));
     }
     _ctx.task_kind = SCB_TASK_NONE;
+
+    // The handshake context belongs to the caller's stack frame and is only needed by
+    // the step handler above. Keeping the pointer would leave it dangling as soon as
+    // the caller returns, still aimed at the frame which held the key material.
+    _ctx.hsk = NULL;
+
     return (_ctx.op_done);
 }
 
@@ -589,17 +601,17 @@ void scb_enc_dec_init(scb_ed_dir_e ed_dir)
 void scb_decrypt_data(u8 *plaintext, u8 *ciphertext, size_t size)
 {
     u32 offset = 0;
+    size_t chunk_size = 0;
 
     OS_SANITY_NULL(ciphertext);
     // NOTE: plaintext == NULL is valid value
 
-    for (size_t i=0; i<size; i += SCB_AES_CHUNK_SIZE, ciphertext += SCB_AES_CHUNK_SIZE)
+    for(size_t bytes_left = size; bytes_left > 0; bytes_left -= chunk_size)
     {
-        int chunk_size = size-i;
-        if (chunk_size > SCB_AES_CHUNK_SIZE)
-        {
-            chunk_size = SCB_AES_CHUNK_SIZE;
-        }
+        chunk_size = (bytes_left > SCB_AES_CHUNK_SIZE)
+                     ? SCB_AES_CHUNK_SIZE
+                     : bytes_left;
+
         cpb_command_pointer(offset);
 
         // 2. COMP_DATA_IN_* = Up-to 16-byte chunk of L3 Command to encrypt.
@@ -615,12 +627,14 @@ void scb_decrypt_data(u8 *plaintext, u8 *ciphertext, size_t size)
         if ((_scb_mode_cpb == TS_FALSE) && (plaintext != NULL))
         {
             cpb_read_data(plaintext, offset, chunk_size);
-            plaintext += SCB_AES_CHUNK_SIZE;
+            plaintext += chunk_size;
         }
         if (offset <= (CPB_COMMAND_BUFFER_SIZE - 2*SCB_AES_CHUNK_SIZE))
         {
             offset += SCB_AES_CHUNK_SIZE;
         }
+
+        ciphertext += chunk_size;
         // NOTE: we keep maximum data what fits into CPB in buffer
     }
 }
@@ -668,10 +682,7 @@ void scb_enc_dec_finish(u8 result_tag[SCB_TAG_SIZE])
 {
     OS_SANITY_NULL(result_tag);
     
-     if (_process_op(SCB_MODE_OP_AES_TG << SCB_MODE_OP_POS) != TS_TRUE)
-     {
-        return;
-     }
+    _process_op(SCB_MODE_OP_AES_TG << SCB_MODE_OP_POS);
      // TAG ready from the decrypted L3 Command.
      scb_tag_read(result_tag);
     _ctx.task_kind = SCB_TASK_NONE;
@@ -740,21 +751,18 @@ void scb_tstwrp_set_comp_data(u8 *data)
     _set_comp_data(data);
 }
 
-bool scb_tstwrp_process_op(u32 op) 
+void scb_tstwrp_process_op(u32 op)
 {
     _ctx.task_kind = SCB_TASK_ENC_DEC;
-    bool ret = _process_op(op) == TS_TRUE ? true : false;
+    _process_op(op);
     _ctx.task_kind = SCB_TASK_NONE;
-    return ret;
 }
 
-bool scb_tstwrp_mov_data_in(u8 dest) 
+void scb_tstwrp_mov_data_in(u8 dest)
 {
     _ctx.task_kind = SCB_TASK_ENC_DEC;
-    bool ret = _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, dest)) == TS_TRUE ? true : false;
+    _process_op(FORM_OP_MOV(SCB_MODE_SRC_COMP_DATA_IN, dest));
     _ctx.task_kind = SCB_TASK_NONE;
-    return ret;
-
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////

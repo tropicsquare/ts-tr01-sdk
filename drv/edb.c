@@ -32,12 +32,10 @@ void edb_suspend(void)
 
 void edb_init(void)
 {
-    u32 tmp;
-
     edb_wakeup();
 
     // Read current configuration
-    tmp = _EDB_REG_READ(EDB_CONFIG_ADDR);
+    u32 tmp = _EDB_REG_READ(EDB_CONFIG_ADDR);
     
     // Keep MODE as is (verification purposes)
     // the mode is EDB_NORMAL_MODE after POR
@@ -54,13 +52,11 @@ void edb_init(void)
 
 void edb_init_cfg(const edb_cfg_t *edb_cfg)
 {
-    u32 tmp;
-
     OS_SANITY_NULL(edb_cfg);
 
     edb_wakeup();
 
-    tmp = _EDB_REG_READ(EDB_CONFIG_ADDR);
+    u32 tmp = _EDB_REG_READ(EDB_CONFIG_ADDR);
     if (edb_cfg->mode != EDB_DONT_SET_MODE)
     {
         FIELD_SET(tmp, EDB_CONFIG_MODE_MASK, edb_cfg->mode);

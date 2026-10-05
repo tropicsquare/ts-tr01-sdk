@@ -13,6 +13,10 @@
 #include "cpuss_defs.h"
 #include "io_ops.h"
 
+#define TIMER_OVERFLOW_INTERRUPT   (TIMER_INT_EN_OVRFL_INT_EN_MASK)
+#define TIMER_THRESHOLD_INTERRUPT  (TIMER_INT_EN_TIME_CMP_INT_EN_MASK)
+#define TIMER_IRQ_CHANNEL          (CSR_MIE_MTIE)
+
 /**
  * @brief Timer counting modes.
  */
@@ -22,16 +26,9 @@ typedef enum {
 } timer_count_mode_e;
 
 typedef enum {
-    TIMER_OVERFLOW_INTERRUPT = TIMER_INT_EN_OVRFL_INT_EN_MASK,
-    TIMER_THRESHOLD_INTERRUPT = TIMER_INT_EN_TIME_CMP_INT_EN_MASK
-} timer_interrupt_mode_t;
-
-typedef enum {
     TIMER_1 = TIMER_1_BASE_ADDRESS,
     TIMER_2 = TIMER_2_BASE_ADDRESS
 } timer_address_t;
-
-#define TIMER_IRQ_CHANNEL (CSR_MIE_MTIE)
 
 /**
  * Enable timer.
@@ -52,7 +49,7 @@ static inline void timer_reset(timer_address_t timer)
     PTR32_T(timer + TIMER_M_TIME_ADDR) = 0x0;
 }
 
-static inline u32 timer_get_value(timer_address_t timer)
+static inline TS_CHECK_RETVAL u32 timer_get_value(timer_address_t timer)
 {
     return (PTR32_T(timer + TIMER_M_TIME_ADDR));
 }
@@ -72,22 +69,22 @@ void timer_setup(timer_address_t timer, u16 prescaler, timer_count_mode_e mode, 
  *
  * @param[in] timer: target timer
  */
-timer_count_mode_e timer_get_mode(timer_address_t timer);
+timer_count_mode_e timer_get_mode(timer_address_t timer) TS_CHECK_RETVAL;
 
 /**
  * Enable timer interrupts.
  *
  * @param[in] timer: target timer
- * @param[in] interrupt: type of interrupt to enable
+ * @param[in] interrupt_mask: mask with interrupts to enable
  */
-void timer_irq_enable(timer_address_t timer, timer_interrupt_mode_t interrupt);
+void timer_irq_enable(timer_address_t timer, u32 interrupt_mask);
 
 /**
  * Disable timer interrupts.
  *
  * @param[in] timer: target timer
- * @returns previously enabled interrupts (timer_interrupt_mode_t)
+ * @returns mask with previously enabled interrupts
  */
-timer_interrupt_mode_t timer_irq_disable(timer_address_t timer);
+u32 timer_irq_disable(timer_address_t timer) TS_CHECK_RETVAL;
 
 #endif // TIMER_H

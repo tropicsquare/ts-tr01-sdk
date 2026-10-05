@@ -42,6 +42,21 @@
     do {__asm__ volatile ("mv %0, ra" : "=r" (dest) : : "memory");} while(0)
 
 /**
+ * @brief Reads the current value of the Stack Pointer (sp) register.
+ *
+ * Addresses below the returned value are free stack space, addresses from it up to
+ * `__stack_top` belong to the current call frame and to the frames of its callers.
+ *
+ * @note The "memory" clobber keeps the read from being moved across a memory access,
+ *       so in a function which saves `ra` in its prologue the read cannot end up
+ *       above the frame setup.
+ *
+ * @param dest C variable where the address will be stored.
+ */
+#define ARCH_READ_STACK_POINTER(dest) \
+    do {__asm__ volatile ("mv %0, sp" : "=r" (dest) : : "memory");} while(0)
+
+/**
  * @brief Reads the value from a RISC-V Control and Status Register (CSR).
  *
  * @param[in]  reg  The name or address of the CSR register (e.g., `mepc`, `mcause`, `mstatus`).

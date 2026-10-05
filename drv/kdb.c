@@ -109,8 +109,8 @@ __ISR void irq_kdb_handler(void)
     //  - Feed to the HW before clearing the flag to unblock the KBUS transfer!
     if ((status & KDB_STATUS_DTRPND_MASK) && (debug_cb != NULL))
     {
-        u32 debug_key;
-        u32 debug_error_flag;
+        u32 debug_key = 0;
+        u32 debug_error_flag = 0;
 
         debug_cb(&debug_key, &debug_error_flag);
         _KDB_REG_WRITE(KDB_DEBUG_KEY_ADDR, debug_key);

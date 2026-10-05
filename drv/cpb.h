@@ -79,7 +79,7 @@ void cpb_clear_descriptors(void);
  * @brief Retrieves the current command from CPB.
  * @return The command code.
  */
-u8 cpb_get_command(void);
+u8 cpb_get_command(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Resets the result buffer.
@@ -90,7 +90,7 @@ void cpb_result_reset(void);
  * @brief Retrieves the result code from CPB.
  * @return The result code.
  */
-u8 cpb_result_code(void);
+u8 cpb_result_code(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Sets the command buffer pointer.
@@ -115,9 +115,8 @@ void cpb_set_error_code(u8 value);
  * @param dest Pointer to destination buffer.
  * @param offset Offset from where to read.
  * @param len Number of bytes to read.
- * @return TS_TRUE if successful, TS_FALSE otherwise.
  */
-ts_bool cpb_read_data(u8 *dest, size_t offset, size_t len);
+void cpb_read_data(u8 *dest, size_t offset, size_t len);
 
 /**
  * @brief Writes data to CPB.

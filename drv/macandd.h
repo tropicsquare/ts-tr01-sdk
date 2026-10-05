@@ -33,7 +33,7 @@ void macandd_suspend(void);
  * This operation uses data prepared in CPB buffer and result data stores also to CPB buffer.
  * @return TS_TRUE when operation done without any error or TS_FALSE otherwise.
  */
-ts_bool macandd_exec(void);
+ts_bool macandd_exec(void) TS_CHECK_RETVAL;
 
 
 /**

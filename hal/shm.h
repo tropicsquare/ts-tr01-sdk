@@ -49,7 +49,7 @@ void shm_init(void);
  * @brief Check shared memory consistency
  * @return the result
  */
-ts_bool shm_ok(void);
+ts_bool shm_ok(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Read one u32 value from shared memory
@@ -57,7 +57,7 @@ ts_bool shm_ok(void);
  * @param[in] offset in bytes
  * @return the result
  */
-u32 shm_read(u32 offset);
+u32 shm_read(u32 offset) TS_CHECK_RETVAL;
 
 /**
  * @brief write one u32 value to shared memory without updating CRC
@@ -81,7 +81,7 @@ void shm_update_crc(void);
  * @brief Get last calculated value of SHM CRC (no recalculation is performed)
  * @return CRC value
  */
-u32 shm_get_crc(void);
+u32 shm_get_crc(void) TS_CHECK_RETVAL;
 
 /**
  * @brief write one u32 value to shared memory and update CRC
@@ -90,7 +90,7 @@ u32 shm_get_crc(void);
  * @param[in] offset in bytes
  * @return the result
  */
-ts_bool shm_set(u32 offset, u32 value);
+ts_bool shm_set(u32 offset, u32 value) TS_CHECK_RETVAL;
 
 #endif // ! _SHM_H
 

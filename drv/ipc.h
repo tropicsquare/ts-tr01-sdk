@@ -92,7 +92,7 @@ void ipc_transmit_data_u8(u32 size, const u8 *data);
  * @note  Blocks until parent process sends random number
  * @return random_number
  */
-u32 ipc_get_random_num(void);
+u32 ipc_get_random_num(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Gets a u32 array from parent process
@@ -106,6 +106,6 @@ void ipc_receive_data(u32 size, u32 *data);
  * @brief Gets a u32 number from parent process
  * @note  Blocks until parent process sends number
  */
-u32 ipc_receive_num(void);
+u32 ipc_receive_num(void) TS_CHECK_RETVAL;
 
 #endif /* ! IPC_H */

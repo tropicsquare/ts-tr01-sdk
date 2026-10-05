@@ -18,7 +18,7 @@
  * @param[in] len number of bytes
  * @return the checksum
  */
-u32 crc32(const u8 *data, size_t len);
+u32 crc32(const u8 *data, size_t len) TS_CHECK_RETVAL;
 
 #endif // ! CRC32_H
 

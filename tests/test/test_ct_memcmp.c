@@ -9,6 +9,7 @@
 
 #include "unity.h"
 #include "util.h"
+#include "mock_prng.h"
 
 void setUp(void)    {}
 void tearDown(void) {}

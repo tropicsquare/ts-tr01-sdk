@@ -67,8 +67,6 @@ void os_delay(u32 ms)
 /// \note does not count more than one ms
 void os_delay_us(u32 us)
 {
-    u32 t;
-    
     timer_reset(TIMER_2);
     timer_enable(TIMER_2);  // start timer first, then compute delay for minimal time inaccuracy
 
@@ -78,10 +76,9 @@ void os_delay_us(u32 us)
     }
 
     // convert [us] to timer ticks
-    t = _US_TO_TICKS(us);
+    u32 t = _US_TO_TICKS(us);
 
-    while (timer_get_value(TIMER_2) < t)
-        ;
+    while (timer_get_value(TIMER_2) < t) {}
 
     timer_disable(TIMER_2);
 
@@ -169,8 +166,7 @@ void os_wait_for_critical(os_wait_for_pfunc_t condition, u32 timeout_us)
     }
     os_alarm(); 
     // may continue here only in case os_alarm() not implemented as dead-loop
-    while (1)
-        ;
+    while (1) {}
 }
 
 void os_reset(void)

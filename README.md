@@ -78,39 +78,20 @@ The CodeChecker tool is used to perform static code analysis and generate report
 
 You need to install CodeChecker and dependencies. Check out the [official repository](https://github.com/Ericsson/codechecker) for guidance.
 
-## Generating reports
+## Run
 
-There are 2 options to get reports:
+There are 2 options to run the static code analysis:
 
-1. Generate HTML report using CLI.
-    - Run following commands:
-
+1. In command line:
     ```sh
-    CodeChecker check -b "./scripts/codechecker/codechecker_build.sh" --config ./scripts/codechecker/codechecker_config.yml
-    CodeChecker parse -e html ./.codechecker/reports -o ./.codechecker/reports_html
+    ./scripts/codechecker/codechecker_run.sh
     ```
-    
-    - Open `./.codechecker/reports_html/index.html` in your favorite web browser.
+    To generate JSON (Code Climate format, handy in MRs) and HTML reports, add the `--gen-reports` flag. To see HTML reports, open `./.codechecker/reports_html/index.html` in your favorite web browser.
 
-2. Use VS Code CodeChecker add-on.
-    - Install the add-on from [marketplace](https://marketplace.visualstudio.com/items?itemName=codechecker.vscode-codechecker).
-    - Add these lines to your VS Code's workspace settings (`.vscode/settings.json`):
-
-    ```json
-    "codechecker.executor.executablePath": <path to CodeChecker>,
-    "codechecker.analyze.arguments": "--config ./scripts/codechecker/codechecker_config.yml",
-    "codechecker.log.buildCommand": "./scripts/codechecker/codechecker_build.sh",
-    "codechecker.backend.compilationDatabasePath": "${workspaceFolder}/.codechecker/compile_commands.json"
-    ```
-
-    - Note: `<path to CodeChecker>` can be replaced with "CodeChecker" if the CodeChecker is available in your `$PATH`. Otherwise, you need to specify full path to the CodeChecker executable.
-    - Refer to the add-on's documentation on how to run analysis. Usually, you need to click the "Run CodeChecker log" and "Analyze entire project" buttons.
-    - After running analysis, errors will be available either in CodeChecker panel or in VS Code's problems tab in the bottom.
+2. Use [VS Code CodeChecker add-on](https://marketplace.visualstudio.com/items?itemName=codechecker.vscode-codechecker).
 
 ## Remarks
 The current CodeChecker configuration is in YAML format, as it is more human-readable than JSON and also supports comments.
-
-The enabled checkers are intentionally a minimal subset of what CodeChecker offers — the set that passes green on the current codebase. New checks (`bugprone-*`, `cert-*`, `cppcoreguidelines-*`, the `sensitive` / `portability` profiles, etc.) should be added incrementally: enable, clean up the findings they produce, commit. See `scripts/codechecker/codechecker_config.yml` for the current set.
 
 # Rebuilding lib-nonpublic binaries
 

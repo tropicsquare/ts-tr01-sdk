@@ -154,6 +154,13 @@ void sec_cntr_init_app(void);
 void sec_cntr_set_active_sensors(u64 channels);
 
 /**
+ * @brief Get the set of currently enabled sensors
+ *
+ * @returns Mask of currently enabled alarm channels (sec_cntr_alarm_channels_e).
+ */
+u64 sec_cntr_get_active_sensors(void) TS_CHECK_RETVAL;
+
+/**
  * @brief Configures interrupts of Security Center
  *
  * @param channels Channels to start guarding. Shall be mask of sec_cntr_alarm_channels_e.
@@ -191,18 +198,18 @@ void sec_cntr_set_alarms(u64 channels);
 /**
  * @returns Mask of recorded alarms since start-up.
  */
-u64 sec_cntr_get_alarm_memory(void);
+u64 sec_cntr_get_alarm_memory(void) TS_CHECK_RETVAL;
 
 /**
  * @returns Mask of all active alarm channels (sec_cntr_alarm_channels_e).
  */
-u64 sec_cntr_get_alarms(void);
+u64 sec_cntr_get_alarms(void) TS_CHECK_RETVAL;
 
 
 /**
  * @returns Mask of enabled active alarm channels (sec_cntr_alarm_channels_e).
  */
-u64 sec_cntr_get_active_alarms(void);
+u64 sec_cntr_get_active_alarms(void) TS_CHECK_RETVAL;
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -212,7 +219,7 @@ u64 sec_cntr_get_active_alarms(void);
 /**
  * @returns Current life-cycle state of the device
  */
-sec_cntr_life_cycle_state_t sec_cntr_lc_read(void);
+sec_cntr_life_cycle_state_t sec_cntr_lc_read(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Change life-cycle state of device from Virgin to Provisioned.

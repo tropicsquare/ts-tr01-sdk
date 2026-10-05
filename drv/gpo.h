@@ -211,7 +211,7 @@ void gpo_off(gpo_e gpo);
  * @param gpo The GPO pin to read.
  * @return true if state is active (HI), false otherwise.
  */
-bool gpo_state(gpo_e gpo);
+bool gpo_state(gpo_e gpo) TS_CHECK_RETVAL;
 
 /**
  * @brief Toggles the state of the specified GPO pin.

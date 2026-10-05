@@ -28,7 +28,7 @@
 
 ///@}
 
-u16 crc16_byte(u8 data, u16 crc);
+u16 crc16_byte(u8 data, u16 crc) TS_CHECK_RETVAL;
 
 /**
  * Compute the CRC16 checksum for an array
@@ -37,7 +37,7 @@ u16 crc16_byte(u8 data, u16 crc);
  * @param[in] len number of bytes
  * @return the checksum
  */
-u16 crc16(const u8 *data, size_t len);
+u16 crc16(const u8 *data, size_t len) TS_CHECK_RETVAL;
 
 #endif // ! CRC16_H
 

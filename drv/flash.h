@@ -78,9 +78,24 @@
  * 
  */
 ///@{
-#define FLASH_MAX_ENCRYPTED_SIZE            476 // Encrypted chunk size in sector
-#define FLASH_NONCE_SIZE                    16
-#define FLASH_ATAG_SIZE                     16
+#define FLASH_MAX_ENCRYPTED_SIZE     476  /**< Width of the SECT_CTEXT field, for struct layout only.
+                                               Not a payload limit, see ::FLASH_MAX_ENCRYPTED_PAYLOAD. */
+
+/**
+ * @brief Maximum usable encrypted payload in bytes.
+ *
+ * One less than ::FLASH_MAX_ENCRYPTED_SIZE because of a known, accepted off-by-one in the FSS
+ * SECT_DLENGTH comparator: it compares >= 476 where it should compare > 476, so a 476 B payload
+ * is encrypted and decrypted correctly but still raises STATUS[ENCRYPT_ERR] on write and
+ * STATUS[DECRYPT_ERR] on read. The decision is to honour the flag rather than ignore it, so
+ * payloads are capped one byte below the field width.
+ *
+ * @warning The FSS design specification states 476 B. Do not "restore" this constant to 476
+ *          from the specification - the RTL is what deviates from it.
+ */
+#define FLASH_MAX_ENCRYPTED_PAYLOAD  475
+#define FLASH_NONCE_SIZE             16
+#define FLASH_ATAG_SIZE              16
 ///@}
 
 /**
@@ -99,7 +114,7 @@ void flash_init(void);
  * @brief Check if the flash subsystem has been initialized.
  * @return TS_TRUE if flash_init() has been successfully completed.
  */
-ts_bool flash_init_done(void);
+ts_bool flash_init_done(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Disables clock for Flash Subsystem
@@ -136,10 +151,12 @@ void flash_init_scrambling(u8 *seed);
 
 /**
  * @brief Reads single word from Flash Memory
+ * @warning The function returns 0x0 as data if flash_read_data() fails. All code
+ * paths that exist at this commit are verified to not be affected by this warning.
  * @param[in] address Byte address to read from, relative to start of Flash Subsystem address space
  * @returns Value read from Flash Memory
  */
-u32 flash_read_word(u32 address);
+u32 flash_read_word(u32 address) TS_CHECK_RETVAL;
 
 /**
  * @brief Read multiple words from Flash Memory
@@ -148,7 +165,7 @@ u32 flash_read_word(u32 address);
  * @param[out] dest Destination where to put data.
  * @returns TS_TRUE if read performed ok
  */
-ts_bool flash_read_data(u32 *dest, u32 address, size_t size);
+ts_bool flash_read_data(u32 *dest, u32 address, size_t size) TS_CHECK_RETVAL;
 
 /**
  * @brief Writes (Programs) single word of Flash Memory
@@ -159,11 +176,13 @@ void flash_write_word(u32 address, u32 data);
 
 /**
  * @brief Writes (Programs) single word of Flash Memory and checks the word was written correctly.
+ * @warning If `data` is 0x0 and flash_read_word() fails, the function returns TS_TRUE. All code
+ * paths that exist at this commit are verified to not be affected by this warning.
  * @param[in] address Byte address to write
  * @param[in] data Data to write(program)
  * @returns TS_TRUE if data were programmed correctly, TS_FALSE otherwise
  */
-ts_bool flash_write_word_verify(u32 address, u32 data);
+ts_bool flash_write_word_verify(u32 address, u32 data) TS_CHECK_RETVAL;
 
 
 /**
@@ -177,11 +196,13 @@ void flash_write_word_isr(u32 address, u32 data);
 
 /**
  * @brief Check if flash has empty space then writes single word of Flash Memory and checks the word was written correctly.
+ * @warning If `data` is 0x0 and flash_read_word() fails, the function returns TS_TRUE. All code
+ * paths that exist at this commit are verified to not be affected by this warning.
  * @param[in] address Byte address to write
  * @param[in] data Data to write(program)
  * @returns TS_TRUE if data were programmed correctly, TS_FALSE otherwise
  */
-ts_bool flash_safe_write_word(u32 address, u32 data);
+ts_bool flash_safe_write_word(u32 address, u32 data) TS_CHECK_RETVAL;
 
 /**
  * @brief Reads single sector of Flash Memory to RAM Buffer and copy to CPU Memory.
@@ -189,17 +210,28 @@ ts_bool flash_safe_write_word(u32 address, u32 data);
  * @param[in] address Address of an unencrypted sector to read, shall be start of sector.
  * @returns TS_FALSE if address is invalid, TS_TRUE otherwise
  */
-ts_bool flash_read_sector(u32 *dest, u32 address);
+ts_bool flash_read_sector(u32 *dest, u32 address) TS_CHECK_RETVAL;
 
 /**
  * @brief Read single encrypted sector of Flash Memory to RAM Buffer, decrypt and copy to CPU Memory.
+ *
  * @param[out] dest Target memory where to store the read data after decryption.
+ * @param[in] dest_size Size of the target memory in bytes. The copy is bounded by this value,
+ *                      see the warning below.
  * @param[in] address Address of an encrypted sector to read, shall be start of sector.
- * @returns Number of bytes read from the sector.
+ *
+ * @returns Number of bytes copied into @p dest, or 0 if nothing was copied - the sector is
+ *          free, its decryption failed, or the arguments are out of bounds.
+ *
+ * @warning The copy is silently truncated when the sector holds more than @p dest_size bytes.
+ *          The return value is the number of bytes copied, not the payload length stored in
+ *          the sector, so a caller cannot distinguish a truncated read from a sector that
+ *          happened to hold exactly @p dest_size bytes. Pass a buffer of at least
+ *          ::FLASH_MAX_ENCRYPTED_PAYLOAD bytes to rule truncation out.
  */
-size_t flash_read_sector_enc(u8 *dest, u32 address);
+size_t flash_read_sector_enc(u8 *dest, size_t dest_size, u32 address) TS_CHECK_RETVAL;
 
-ts_bool flash_write_sector(u32 address, u32 *data);
+ts_bool flash_write_sector(u32 address, u32 *data) TS_CHECK_RETVAL;
 
 /**
  * @brief Set NONCE used in next encrypted write.
@@ -217,30 +249,23 @@ void flash_set_nonce(u8 nonce[FLASH_NONCE_SIZE]);
  * @param[in] nonce Nonce for this sector.
  * @returns TS_TRUE if stored successfully or TS_FALSE if not.
  */
-ts_bool flash_write_sector_enc(u32 address, void *data, size_t size, u8 nonce[FLASH_NONCE_SIZE]);
+ts_bool flash_write_sector_enc(u32 address, void *data, size_t size, u8 nonce[FLASH_NONCE_SIZE]) TS_CHECK_RETVAL;
 
 /**
  * @brief Read NVR sector to RAM buffer (FSS_RAM_BUF_BASE_ADDR)
+ * @warning If the cases when this function can fail change, take it into account in
+ * _flash_cfg_trim(), where the retval is ignored.
  *
  * @param address of NVR sector.
  */
-ts_bool flash_read_nvr_to_buf(u32 address);
+ts_bool flash_read_nvr_to_buf(u32 address) TS_CHECK_RETVAL;
 
 /**
  * @brief Read NVR sector and copy to destination
  *
  * @param address of NVR sector.
  */
-ts_bool flash_read_nvr(u32 *dest, u32 address);
-
-/**
- * @brief Read data from RAM buffer.
- *
- * @param[in] offset Address in buffer (0..511)
- * @param[in] size Number of bytes to copy
- * @param[out] dest Destination where to copy data.
- */
-ts_bool flash_read_buf(u8 *dest, u32 offset, size_t size);
+ts_bool flash_read_nvr(u32 *dest, u32 address) TS_CHECK_RETVAL;
 
 /**
  * @brief Verify whole sector is erased (512B)
@@ -248,7 +273,7 @@ ts_bool flash_read_buf(u8 *dest, u32 offset, size_t size);
  * @param address Starting address of sector
  * @returns TS_TRUE if sector is erased
  */
-ts_bool flash_verify_erased(u32 address);
+ts_bool flash_verify_erased(u32 address) TS_CHECK_RETVAL;
 
 /**
  * @brief Erase whole sector (512B)
@@ -278,6 +303,17 @@ void flash_erase_chip(void);
  * @brief Clears RAM buffer content.
  */
 void flash_flush_rambuf(void);
+
+/**
+ * @brief Erase the driver sector cache in CPU memory.
+ *
+ * The cache holds the plaintext of the sector being read or written by
+ * `flash_read_sector_enc()` / `flash_write_sector_enc()`, so it is erased at the end
+ * of both. This entry point covers the case when neither reaches its end, i.e. when
+ * an alarm is entered from inside the driver. It erases CPU memory only, the FSS RAM
+ * buffer is cleared by `flash_flush_rambuf()`.
+ */
+void flash_clear_sector_cache(void);
 
 // void flash_read_to_buffer(u32 address);
 // void flash_write_from_buffer(u32 address, u32 mask_31_0, u32 mask_63_32, u32 mask_95_64, u32 mask_127_96);

@@ -19,7 +19,7 @@
  * @param[in] csr_id: CSR to read
  * @returns data from CSR (u32)
  */
-inline u32 __attribute__((always_inline)) cpu_read_csr(const csr_enum_t csr_id) 
+inline TS_CHECK_RETVAL u32 __attribute__((always_inline)) cpu_read_csr(const csr_enum_t csr_id) 
 {
     u32 data;
     asm volatile ("csrr %0, %1" : "=r"(data) : "i"(csr_id): "memory");

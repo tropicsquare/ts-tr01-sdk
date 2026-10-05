@@ -31,6 +31,7 @@ void spi_set_ready(void);
 
 /**
  * @brief Full SPI init for regular operation.
+ * @warning `spi_ll_init()` must be called atleast once before calling this function.
  *
  * @param rx_callback RX byte callback
  * @param tx_callback TX word fetching calback
@@ -42,14 +43,14 @@ void spi_init(spi_rx_callback_t rx_callback, spi_tx_callback_t tx_callback);
  *
  * @return TS_TRUE if chip select (CSN) not active (HIGH).
  */
-ts_bool spi_idle(void);
+ts_bool spi_idle(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Get state or response queue.
  *
  * @return TS_TRUE if empty, TS_FALSE if not empty.
  */
-ts_bool spi_response_queue_empty(void);
+ts_bool spi_response_queue_empty(void) TS_CHECK_RETVAL;
 
 /**
  * @brief Clear the response queue instantly.

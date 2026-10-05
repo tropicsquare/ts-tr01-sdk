@@ -25,7 +25,7 @@ LOG_DEF("MAD");
 // max time for MACANDD operation is about 5ms without secure clock
 #define _MAD_TIMEOUT_MAX (20 * 1000) // [us]
 
-static ts_bool _condition_op_done(void)
+static TS_CHECK_RETVAL ts_bool _condition_op_done(void)
 {
     return (_MAD_REG_READ(MACANDD_STATUS_ADDR) & MACANDD_STATUS_DONE_MASK) ? TS_TRUE : TS_FALSE;
 }

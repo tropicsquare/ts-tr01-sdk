@@ -18,12 +18,17 @@ tests/
 ├── project.yml                # Ceedling configuration
 ├── .gitignore                 # Ignores vendor/ and build/
 ├── test/
-│   ├── test_ct_memcmp.c       # Tests for ct_memcmp()  — common/util.c
-│   ├── test_crc16.c           # Tests for crc16()      — hal/crc16.c
-│   ├── test_scramble.c        # Tests for scramble_*() — drv/scramble.c
+│   ├── test_ct_memcmp.c       # Tests for ct_memcmp()      — common/util.c
+│   ├── test_crc16.c           # Tests for crc16()          — hal/crc16.c
+│   ├── test_memerase_safe.c   # Tests for memerase_safe()  — common/util.c
+│   ├── test_memzero_safe.c    # Tests for memzero_safe()   — common/util.c
+│   ├── test_prng.c            # Tests for prng_seed/read()  — drv/prng.c
+│   ├── test_scramble.c        # Tests for scramble_*()     — drv/scramble.c
+│   ├── test_mbist.c           # Tests for the MBIST driver — drv/mbist.c
 │   └── support/
 │       └── stubs/
 │           ├── common.h       # Host stub shadowing HW-specific common.h
+│           ├── io_ops.h       # Host stub routing MMIO accesses to the test
 │           └── os.h           # Host stub shadowing HW-specific os.h
 └── README.md
 ```
@@ -58,6 +63,41 @@ Key properties verified:
   `scramble_init(seq, 8)` + `scramble_shuffle(seq, 7, seed)` leaves seq[7]=7
   (identity) in the MSB nibble position.
 - **OTP scrambling** — documents the full-shuffle + split-register pattern.
+
+### `test_mbist` — MBIST driver
+
+Covers `mbist_init()`, `mbist_wakeup()`, `mbist_suspend()`, `mbist_exec_test()`,
+`mbist_erase()` and `irq_mbist_handler()` from `drv/mbist.c`. The static
+functions of the driver are reached through this public API.
+
+The driver drives the TSMBIST engine through memory mapped registers only, so
+the tests run against a behavioral model of the engine built from
+`ODS_TSMBIST_design_spec`: W1C on `STATUS`, W1S on `COMMAND`, a reset clearing
+all the registers, `PREPARE` publishing `MEM_SEL` in `TEST_PROGRESS` and `START`
+running a test which ends by calling the interrupt handler of the driver. The
+`io_ops.h` stub routes every register access into that model - see the file
+comment of `test_mbist.c` for the details.
+
+What the model does is scriptable, which is what makes the failure modes
+testable: an engine which does not react to `PREPARE`, one which never finishes
+a test, one reporting an error on a channel, or one leaving a channel in
+`TEST_PROGRESS`.
+
+Key properties verified:
+
+- **Sequencing** — `MEM_SEL` before `CONFIG[MBIST_EN]` before `PREPARE` before
+  `START`, and that a failed preparation does not start a test at all.
+- **Result evaluation** — a channel passes only with `TEST_PROGRESS` cleared,
+  `TEST_RESULT` set and `TEST_ERROR` cleared, considering the tested channels
+  only.
+- **Timeout** — an engine which never signals DONE fails the call instead of
+  locking the FW up, and the wait is the worst-case test duration.
+- **Engine release** — an unfinished test is stopped by the engine reset before
+  the MBIST clock is disabled.
+- **Setup handling** — the reset keeps the setup of `mbist_init()`, and
+  `mbist_erase()` restores the `CONFIG` register of the caller.
+- **Unsupported CRC** — `mbist_exec_test()` rejects `MBIST_TEST_CRC` without
+  touching the engine, as TSMBIST maintains no result registers for it.
 
 ## Building and running
 

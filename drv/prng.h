@@ -6,6 +6,9 @@
  * @license For the license see file LICENSE.txt file in the root directory of this source tree.
  */
 
+#ifndef PRNG_H
+#define PRNG_H
+
 #include "type.h"
 
 /**
@@ -19,11 +22,15 @@
 void prng_seed(u32 seed);
 
 /**
- * @brief Retrieves the next pseudo-random 32-bit unsigned integer.
+ * @brief Reads the next pseudo-random 32-bit unsigned integer.
  *
- * This function generates and returns the next value in the pseudo-random sequence.
- * The sequence depends on the last seed value set by `prng_seed()`.
+ * The sequence depends on the last seed value set by `prng_seed()`. The generator
+ * is a plain LCG, so the values are not suitable for any cryptographic purpose.
  *
- * @return A pseudo-random 32-bit unsigned integer.
+ * @param[out] value Buffer for the value. Written only on success.
+ * @return `TS_TRUE` on success, `TS_FALSE` when @p value is NULL or when the PRNG
+ *         has not been seeded yet.
  */
-u32 prng_get_value_insecure(void);
+ts_bool prng_read(u32 *value) TS_CHECK_RETVAL;
+
+#endif // ! PRNG_H

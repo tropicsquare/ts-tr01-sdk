@@ -9,7 +9,13 @@
 #ifndef BITS_H
 #define BITS_H
 
-#define BITS_PER_WORD 32
+/**
+ * @brief Number of bits of an unsigned long, the type the masks below are built from.
+ * @note Derived from the compiler on purpose: it is 32 for the 32 bit target, but a
+ *       host build of the unit tests has a 64 bit long, where a hardcoded 32 would
+ *       make GENMASK() produce masks wider than the requested field.
+ */
+#define BITS_PER_WORD (__CHAR_BIT__ * __SIZEOF_LONG__)
 
 /**
  * @brief Allows token concatenation.
@@ -43,6 +49,11 @@
 
 #define GENMASK(h, l) \
     (GENMASK_INPUT_CHECK(h, l) + __GENMASK(h, l))
+
+/* Catches a BITS_PER_WORD which does not match the width of unsigned long - the
+   masks would be wider than the requested field, breaking FIELD_GET/FIELD_SET. */
+_Static_assert(GENMASK(7, 0) == 0xFFUL, "GENMASK does not match BITS_PER_WORD");
+_Static_assert(GENMASK(10, 8) == 0x700UL, "GENMASK does not match BITS_PER_WORD");
 
 #define __bf_shf(x) (__builtin_ffsll(x) - 1)
 

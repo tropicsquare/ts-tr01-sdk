@@ -26,7 +26,7 @@
  * @param[in] limit Maximal number of bytes copied
  * @returns Number of bytes actually read. 
  */
-size_t debug_fetch(u8 *data, size_t limit);
+size_t debug_fetch(u8 *data, size_t limit) TS_CHECK_RETVAL;
 
 /**
  * @brief Flush data exceed limit.

@@ -46,11 +46,15 @@ void ui_response(msg_t *msg)
 {
     OS_SANITY_NULL(msg);
 
+    if (msg_tx_send(msg) != TS_TRUE)
+    {   // nothing was queued, so this message must not become the stored "last response"
+        // it would fail the same way on every RESEND_REQ; keep the previous _msg_retry
+        return;
+    }
     memcpy(&_msg_retry, msg, sizeof(_msg_retry));
-    msg_tx_send(msg);
 }
 
-static inline ts_bool _msg_valid(msg_t *msg)
+static inline TS_CHECK_RETVAL ts_bool _msg_valid(msg_t *msg)
 {
     return ((msg->hdr == TS_L2_CMD_NONE) ? TS_FALSE : TS_TRUE);
 }
@@ -69,12 +73,16 @@ void ui_response_async(msg_t *msg)
 {
     OS_SANITY_NULL(msg);
 
+    if (msg_tx_send(msg) != TS_TRUE)
+    {   // nothing was queued, keep the retry buffers untouched (see ui_response())
+        return;
+    }
+    // NOTE: the retry buffers are updated after the send, but still before returning to the
+    //       main loop, so a RESEND_REQ (handled from ui_task) can never observe them stale
     // in case there was L3 async response before, allow it for RESEND_REQ
     _update_retry_msg();
     // backup this part of L3 response to be able to resend later
     memcpy(&_msg_retry_async, msg, sizeof(_msg_retry_async));
-
-    msg_tx_send(msg);
 }
 
 ts_bool ui_response_async_blocked(void)
@@ -125,7 +133,7 @@ ts_bool ui_idle(void)
     return TS_TRUE;
 }
 
-static ts_bool _resend_sync(void)
+static TS_CHECK_RETVAL ts_bool _resend_sync(void)
 {   // the repeated message needs to by updated according to current state
     // in case we damaged L3 response by RESEND_REQ, we need to retry
     if ((msg_tx_is_idle() == TS_TRUE) && (msg_rx_idle() == TS_TRUE))
@@ -134,8 +142,11 @@ static ts_bool _resend_sync(void)
         {
             // to be sure, re-check validity even if it should be OK 
             if (_msg_valid(&_msg_retry_async) == TS_TRUE)
-            {
-                msg_tx_send(&_msg_retry_async);
+            {   // the result is deliberately discarded: a failure here is deterministic for
+                // this message, so keeping _async_response_retry_needed set would spin
+                // _resend_sync() forever and ui_done() would never let the main loop sleep or
+                // reboot. The chunk is dropped instead; msg_tx_send() has already logged it.
+                TS_IGNORE_RESULT(msg_tx_send(&_msg_retry_async));
             }
             _async_response_retry_needed = TS_FALSE;
         }
@@ -190,7 +201,9 @@ void ui_task(void)
         msg_rx_reset();
     }
 
-#if DISABLE_L3 != 1   
-    _resend_sync();
-#endif // DISABLE_L3 != 1 
+#if DISABLE_L3 != 1
+    // called for its side effects (async chunk resend, retry message update) only;
+    // the "all done for sleep" result is read separately by the caller via ui_done()
+    TS_IGNORE_RESULT(_resend_sync());
+#endif // DISABLE_L3 != 1
 }

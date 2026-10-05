@@ -18,13 +18,21 @@ void prng_seed(u32 seed)
     _seed_done = true;
 }
 
-u32 prng_get_value_insecure(void)
+ts_bool prng_read(u32 *value)
 {
-    // force prng_seed() called
-    OS_ASSERT(_seed_done == true);
+    if (value == NULL)
+    {   // nowhere to deliver the value
+        return TS_FALSE;
+    }
+
+    if (_seed_done != true)
+    {   // no sequence to continue yet, the caller decides how bad that is
+        return TS_FALSE;
+    }
 
     _seed = _seed * 1664525U + 1013904223U;
     // NOTE: The multiplier 1664525 and increment 1013904223 are classic values used by 
     //       many old-school PRNGs (like the one in ANSI C).
-    return _seed;
+    *value = _seed;
+    return TS_TRUE;
 }

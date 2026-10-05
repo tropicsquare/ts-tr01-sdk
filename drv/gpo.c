@@ -30,7 +30,7 @@ static const gpo_setup_t _GPO[GPO_NUM] = {
 
 static ts_bool gpo_int_enable;
 
-static u32 _gpo_bit(gpo_e gpo)
+static TS_CHECK_RETVAL u32 _gpo_bit(gpo_e gpo)
 {
     if (gpo >= GPO_NUM)
     {
@@ -39,7 +39,7 @@ static u32 _gpo_bit(gpo_e gpo)
     return (1UL << _GPO[gpo].pos);
 }
 
-static u32 _gpo_addr(gpo_e gpo)
+static TS_CHECK_RETVAL u32 _gpo_addr(gpo_e gpo)
 {
     if (gpo >= GPO_NUM)
     {
@@ -57,7 +57,7 @@ void gpo_init(void)
 void gpo_set_src(gpo_e gpo, u32 src)
 {
     u32 addr = _gpo_addr(gpo);
-    u32 mask;
+    u32 mask = 0;
 
     switch (gpo)
     {

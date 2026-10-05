@@ -18,6 +18,7 @@
 #include "scramble.h"
 #include "soc_ctrl.h"
 #include "tassic_defs.h"
+#include "util.h"
 
 LOG_DEF("OTP");
 
@@ -46,16 +47,14 @@ enum {
 
 #define _OTP_TIMEOUT_DEFAULT 10000 // [us]
 
-static ts_bool _otp_prog_done;
+static volatile ts_bool _otp_prog_done;
 
-static u32 _otp_read_word(u32 addr);
-
-static ts_bool _condition_prog_done(void)
+static TS_CHECK_RETVAL ts_bool _condition_prog_done(void)
 {
     return _otp_prog_done;
 }
 
-static ts_bool _condition_is_idle(void)
+static TS_CHECK_RETVAL ts_bool _condition_is_idle(void)
 {
     switch ( _STATUS_GET_OPMODE())
     {
@@ -68,7 +67,7 @@ static ts_bool _condition_is_idle(void)
     }
 }
 
-static ts_bool _condition_is_read(void)
+static TS_CHECK_RETVAL ts_bool _condition_is_read(void)
 {
     // by first reading there is IDLE opmode
     // continuous reading cause "READ_READY" opmode
@@ -79,6 +78,18 @@ static ts_bool _condition_is_read(void)
         return TS_TRUE;
     }
     return TS_FALSE;
+}
+
+static TS_CHECK_RETVAL u32 _otp_read_word(u32 addr)
+{
+    OS_ASSERT((addr & 0x3) == 0); // only u32 word aligned address is supported
+    OS_ASSERT(addr < OTP_SIZE);
+
+    os_wait_for_critical(_condition_is_read, _OTP_TIMEOUT_DEFAULT);
+
+    u32 read_data = _OTP_MEMORY_READ(addr);
+
+    return read_data;
 }
 
 void otp_init(void)
@@ -123,9 +134,7 @@ void otp_timing_init(void)
         {0,0,0} // end of table
     };
 
-    int i;
-
-    for (i = 0; ; i++)
+    for (int i = 0; ; i++)
     {
         const otp_timing_table_t *t = &OTP_TIMING_TABLE[i];
         
@@ -163,8 +172,7 @@ void otp_wakeup(void)
 
 void otp_init_scrambling(u8 *seed)
 {   // <seed> is per chip fixed randomizing sequence at least 11 bytes long (number of items in SCRAM_* registers)
-    u32 scram_value;
-    u8 sequence[_OTP_SCRAM_ITEMS];
+    u8 sequence[_OTP_SCRAM_ITEMS] = {0};
 
     OS_SANITY_NULL(seed);
 
@@ -173,26 +181,16 @@ void otp_init_scrambling(u8 *seed)
     scramble_init(sequence, sizeof(sequence));
     scramble_shuffle(sequence, sizeof(sequence), seed);
     // we have prepared 11 values but we need to split them to two registers (8+3)
-    scram_value = scramble_value_reversed(sequence, _OTP_SCRAM_WORD_NIBBLES);
-    _OTP_REG_WRITE(OTP_CTRL_SCRAM_0_ADDR, scram_value);
-     
-    scram_value = scramble_value_reversed(sequence+_OTP_SCRAM_WORD_NIBBLES, _OTP_SCRAM_ITEMS-_OTP_SCRAM_WORD_NIBBLES);
-    _OTP_REG_WRITE(OTP_CTRL_SCRAM_1_ADDR, scram_value);
+    _OTP_REG_WRITE(OTP_CTRL_SCRAM_0_ADDR,
+                   scramble_value_reversed(sequence, _OTP_SCRAM_WORD_NIBBLES));
+
+    _OTP_REG_WRITE(OTP_CTRL_SCRAM_1_ADDR,
+                   scramble_value_reversed(sequence + _OTP_SCRAM_WORD_NIBBLES,
+                                           _OTP_SCRAM_ITEMS - _OTP_SCRAM_WORD_NIBBLES));
     // NOTE: We use the "reversed" version of scramble to keep it as in ACAB where it was unintentionally reversed.
-}
 
-static u32 _otp_read_word(u32 addr)
-{
-    u32 read_data;
-
-    OS_ASSERT((addr & 0x3) == 0); // only u32 word aligned address is supported
-    OS_ASSERT(addr < OTP_SIZE);
-
-    os_wait_for_critical(_condition_is_read, _OTP_TIMEOUT_DEFAULT);
-
-    read_data = _OTP_MEMORY_READ(addr);
-
-    return read_data;
+    // erase the scrambling from RAM after its written to regs
+    memerase_safe(sequence, sizeof(sequence));
 }
 
 u32 otp_read_word(u32 addr)
@@ -201,7 +199,11 @@ u32 otp_read_word(u32 addr)
 
     // insert some random delay using fast SW pseudo RNG
     // we use busy loop because we need maximum flexibility for delay randomness 
-    os_delay_cycles(prng_get_value_insecure() & 0x7F);
+    // NOTE: the delay is a countermeasure - an unseeded PRNG would turn it into a
+    // constant, so it is treated as a fatal error here
+    u32 rnd = 0;
+    OS_ASSERT(prng_read(&rnd) == TS_TRUE);
+    os_delay_cycles(rnd & 0x7F);
     // NOTE: 1ms corresponds to approx 6750 iterations in TROPIC01
     //       so mask 0x7F will add up to 19 us
 
@@ -217,7 +219,7 @@ u32 otp_read_word(u32 addr)
 
 void otp_read_data(u8 *dest, u32 addr, size_t size)
 {
-    u32 w;
+    u32 w = 0;
     size >>= 2; // bytes to words
     while (size--)
     {
@@ -229,7 +231,7 @@ void otp_read_data(u8 *dest, u32 addr, size_t size)
 }
 
 
-static u8 _bit_value(u8 nibble)
+static TS_CHECK_RETVAL u8 _bit_value(u8 nibble)
 {   // majority of values in 4 bit nibble means the value
     int count = 0;
 
@@ -246,11 +248,9 @@ u8 otp_read_bit_field(u32 addr)
 {   // part of OTP is "bit field" where 4 physical bits represent one real bit 
     // which give us "single bit programming" possibility (8 bits stored in one u32 word)
     // the reason for this is ECC correction which can flip one bit after multiple writes
-    u32 word;
     u8 value = 0;
     u8 bit = 1;
-
-    word = otp_read_word(addr);
+    u32 word = otp_read_word(addr);
 
     while (word)
     {

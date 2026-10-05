@@ -11,10 +11,11 @@
 
 #include <stddef.h>
 #include <stdarg.h>
+#include "type.h"
 
-int xsnprintf(char *buffer, size_t bufsz, const char *fmt, ...);
-int xvprintf(char const *fmt, va_list val);
-int xprintf(char const *fmt, ...);
-int xvsnprintf(char *buffer, size_t bufsz, char const *format, va_list val);
+int xsnprintf(char *buffer, size_t bufsz, const char *fmt, ...) TS_CHECK_RETVAL;
+int xvprintf(char const *fmt, va_list val) TS_CHECK_RETVAL;
+int xprintf(char const *fmt, ...) TS_CHECK_RETVAL;
+int xvsnprintf(char *buffer, size_t bufsz, char const *format, va_list val) TS_CHECK_RETVAL;
 
 #endif // ! XPRINTF_H

@@ -7,14 +7,12 @@ analyzer:
 
     ################################################
     # Enable / disable checks
-    #
-    # NOTE: This is an intentionally minimal starting set that is expected
-    # to pass on the current codebase. New profiles / checks (sensitive,
-    # portability, optin.*, alpha.*, bugprone-*, cert-*, etc.) should be
-    # added incrementally as the code is cleaned up. See README.md,
-    # section "Static code analysis".
     ################################################
     - --enable=profile:security
+    - --enable=profile:portability
+    - --enable=profile:sensitive
+    - --enable=optin.taint
+    - --enable=optin.performance.Padding
 
     # The reserved-identifier diagnostics flag the common `_PRIVATE_MACRO`
     # idiom used throughout this codebase. They must be disabled at the
@@ -30,6 +28,9 @@ analyzer:
     # check stays enabled and still catches missing values without a default.
     - --disable=clang-diagnostic-switch-enum
 
+    # Not enabled by 'clang-diagnostic-*' below for some reason.
+    - --enable=clang-diagnostic-cast-align
+
     # Recommends C11 Annex K functions (memcpy_s, memset_s) which are not
     # provided by the freestanding RISC-V toolchain we build against, so
     # the suggested fix is not available. Not actionable.
@@ -38,6 +39,9 @@ analyzer:
     # CodeChecker's --disable does not propagate to clang-tidy's
     # clang-analyzer-* integration.
     - --disable=security.insecureAPI.DeprecatedOrUnsafeBufferHandling
+
+    # Various security-related checks.
+    - --enable=alpha.security
 
     # Experimental (alpha.*) checker; known to produce false positives on
     # intentional buffer-reuse patterns (e.g. SHA-256 message scheduler
@@ -54,13 +58,86 @@ analyzer:
     # promoted out of alpha.
     - --disable=alpha.core.PointerArithm
 
-    # Flags casts to enum where the integer value is not a named enum
-    # member. Fires on the very common bitmask-flag-enum pattern used
-    # throughout the SDK (e.g. timer_irq_e where TIMER_OVERFLOW_INTERRUPT
-    # | TIMER_THRESHOLD_INTERRUPT yields 3, not a member). The clangsa
-    # path is disabled here; the clang-tidy report path is disabled via
-    # the Checks string below.
-    - --disable=optin.core.EnumCastOutOfRange
+    # ------------------------------------------------------------------
+    # Additional alpha (experimental) clangsa checkers, enabled for extra
+    # security coverage. They are stable
+    # in behaviour but off by default in profile:security. They run under
+    # clangsa only — clang-tidy's clang-analyzer-* integration keeps alpha
+    # checkers disabled — so there is no double-reporting and no mirrored
+    # entry in the clang-tidy Checks string is needed (unlike the disables
+    # above). Low false-positive rate on this codebase; revisit per-checker
+    # if a future code change makes any of them noisy.
+    # ------------------------------------------------------------------
+    # Subtracting two pointers into different objects (UB) — relevant to
+    # driver code that walks register / buffer layouts.
+    - --enable=alpha.core.PointerSub
+    # Reinterpreting a raw byte buffer as a struct with stricter alignment
+    # — relevant to message / packet parsing in the drivers.
+    - --enable=alpha.core.CastToStruct
+    # Identical expressions on both sides of a binary/logical operator —
+    # catches copy-paste logic bugs (e.g. `if (a == a)`).
+    - --enable=alpha.core.IdenticalExpr
+    # Divisor used in a division before it is checked against zero.
+    - --enable=alpha.core.TestAfterDivZero
+    # mem/str copy where source and destination overlap (UB). Directly
+    # relevant to key / secret handling that moves buffers around.
+    - --enable=alpha.unix.cstring.BufferOverlap
+    # String operation whose result is not guaranteed NUL-terminated.
+    - --enable=alpha.unix.cstring.NotNullTerminated
+
+    # Higher yield but expect a first-pass triage: implicit conversions
+    # that lose precision or change sign. Meaningful on a 32-bit target
+    # with length fields and register widths. Keep enabled and triage;
+    # disable only if the findings prove non-actionable.
+    - --enable=alpha.core.Conversion
+
+    # cppcheck
+    - --enable=cppcheck-unusedFunction
+    - --enable=cppcheck-redundantCondition
+    - --enable=cppcheck-variableScope
+    - --enable=cppcheck-bufferAccessOutOfBounds
+    - --enable=cppcheck-nullPointer
+    - --enable=cppcheck-invalidPointerCast
+    # Return value of a function known to have no side effects is discarded.
+    - --enable=cppcheck-ignoredReturnValue
+
+    # ------------------------------------------------------------------
+    # Ignored return values
+    #
+    # `bugprone-unused-return-value` is the load-bearing checker here. Two
+    # neighbours already cover adjacent ground, and both are on via the
+    # wildcards in the clang-tidy Checks string further down -- they need
+    # no entry of their own:
+    #
+    #   clang-diagnostic-unused-result (via `clang-diagnostic-*`) fires
+    #   only on functions carrying `TS_CHECK_RETVAL`, and the build
+    #   compiles with `-Wall -Wextra -Werror` (see sdk.cmake), so those
+    #   already fail the build before CodeChecker ever runs.
+    #
+    #   cert-err33-c (via `cert-*`) is the same machinery with a fixed
+    #   list of hosted C standard library functions. This is freestanding
+    #   firmware and calls almost none of them.
+    #
+    # The gap neither of them sees is a non-void function whose
+    # declaration was never annotated with `TS_CHECK_RETVAL`, called as a
+    # bare statement. 116 non-void functions live in this repo and only
+    # part of them are annotated; this check covers the remainder.
+    #
+    # The checker is already enabled by `bugprone-*` in the Checks string;
+    # the explicit --enable is kept because a silently inert checker is
+    # precisely the failure this block exists to avoid. Its function list
+    # is configured under "Analyzer configs" below.
+    #
+    # None of these fire on void-returning functions, so the many
+    # `spect_suspend()` / `scb_wakeup()`-style bare calls stay silent.
+    #
+    # To discard a result on purpose, use `TS_IGNORE_RESULT()` from
+    # `common/type.h` -- already the idiom in `drv/flash.c` and
+    # `drv/ipc.c`. It assigns the result to a discarded variable, so the
+    # call no longer looks unused -- no `NOLINT` comment and no clang-tidy
+    # version floor.
+    # ------------------------------------------------------------------
+    - --enable=bugprone-unused-return-value
 
     ################################################
     # Cross Translation Unit analysis
@@ -75,14 +152,79 @@ analyzer:
     ################################################
     # Analyzer configs
     ################################################
-    # clang-tidy: start with just clang-analyzer-* and clang-diagnostic-*.
+    # clangsa
+    # optin.performance.Padding Threshold
+    # The Clang default threshold for padding warnings is 24 bytes, which is 
+    # far too lenient for memory-constrained embedded systems. We lower this 
+    # to 4 bytes (exactly one 32-bit machine word on our RISC-V target). 
+    # This strikes a balance: it aggressively prevents structs from wasting a 
+    # full word of RAM, while still tolerating 1 to 3 bytes of padding so 
+    # developers can keep logically related variables grouped together without 
+    # being forced to strictly mathematically pack every single struct.
+    - --checker-config=clangsa:optin.performance.Padding:AllowedPad=4
+
+    # clang-tidy
+    # bugprone-unused-return-value inspects only the functions named in its
+    # `CheckedFunctions` option, and the stock list is C++/STL-oriented, so
+    # it matches nothing here. The option takes regexes, so it is set to
+    # "every function there is", deliberately: any non-void function whose
+    # result is dropped is a finding, whether or not anyone remembered to
+    # annotate its declaration. No name list to keep in sync.
+    #
+    # The regex is that broad rule minus three names:
+    #
+    #   any name, EXCEPT `memcpy`, `memset` or `memmove`
+    #
+    # Those three return their destination pointer, which no caller has
+    # ever wanted (21 such call sites in api/ common/ drv/ hal/).
+    #
+    # "Non-void" is not expressed here and does not need to be: the checker
+    # has `unless(returns(voidType()))` built into its own matcher, so it
+    # never fires on a void function whatever this option says.
+    #
+    # The shape is ugly for one reason: the checker has no exclusion
+    # option, and POSIX ERE (what llvm::Regex speaks) has no negative
+    # lookahead, so there is no `^(?!memcpy|memset|memmove)`. Excluding a
+    # literal name has to be spelled out as a case analysis -- one branch
+    # per character position where a name can first diverge from an
+    # excluded one, plus a branch for names that stop short of one, plus a
+    # branch for names that extend one:
+    #
+    #   [^m:].*       first character is not `m`. The `:` is excluded so
+    #                 the optional `::` qualifier cannot be sidestepped by
+    #                 matching the leading colon here -- without it,
+    #                 `::memcpy` slips straight through
+    #   m[^e].*       `m` then not `e`
+    #   me[^m].*      `me` then not `m`
+    #   mem[^cms].*   `mem` then none of memcpy / memset / memmove
+    #   memc[^p].*    ...and so on, per name, to the end of each
+    #   m | me | ...  a name that stops short of a full excluded name
+    #   memcpy.+ ...  a name that starts with one but continues
+    #
+    # It is mechanical, not clever -- derived from the list
+    # {memcpy, memset, memmove}. To add or drop a name, regenerate the
+    # whole pattern rather than hand-patching a branch.
+    #
+    # Verified against this repo's inventory: all 116 non-void functions
+    # match, and exactly those three do not. `memclear32()` and
+    # `memerase_safe()` are still matched (both void, so nothing is ever
+    # reported for them, but they are not collateral damage of a blanket
+    # `mem*` carve-out either).
+    #
+    # NOTE: the regex form of `CheckedFunctions` requires clang-tidy >= 17.
+    # On older clang-tidy the entry is compared literally, matches nothing,
+    # and this degrades to the two neighbours above rather than failing.
+    - --checker-config=clang-tidy:bugprone-unused-return-value:CheckedFunctions=^(::)?([^m:].*|m[^e].*|m|me[^m].*|me|mem[^cms].*|mem|memc[^p].*|memc|memcp[^y].*|memcp|memm[^o].*|memm|memmo[^v].*|memmo|memmov[^e].*|memmov|mems[^e].*|mems|memse[^t].*|memse|memcpy.+|memset.+|memmove.+)$
+
+    # clang-tidy
     # Specific diagnostics are suppressed via `--disable=...` above
     # (which also takes effect when profile:security re-enables them).
     # The two `-clang-analyzer-...` negations below mirror the CodeChecker
     # --disable= entries — they are needed because CodeChecker's --disable
     # does not propagate to clang-tidy's clang-analyzer-* integration, so
     # the same checker would otherwise still be reported via that path.
-    - --analyzer-config=clang-tidy:Checks=clang-analyzer-*,clang-diagnostic-*,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,-clang-analyzer-optin.core.EnumCastOutOfRange
+    # Note: bugprone* enables a specific check, -bugprone* disables it.
+    - --analyzer-config=clang-tidy:Checks=clang-analyzer-*,clang-diagnostic-*,-clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,bugprone-*,-bugprone-reserved-identifier,-bugprone-easily-swappable-parameters,cert-*,-cert-dcl37-c,-cert-dcl51-cpp,readability-*,-readability-identifier-length,-readability-magic-numbers,-readability-function-cognitive-complexity,performance-*,-performance-no-int-to-ptr,cppcoreguidelines-*,-cppcoreguidelines-avoid-magic-numbers,-cppcoreguidelines-macro-to-enum,-cppcoreguidelines-avoid-non-const-global-variables,portability-*
 
     ################################################
     # Misc configuration

@@ -13,15 +13,17 @@
 #include "io_ops.h"
 #include "soc_ctrl.h"
 #include "spect_regs.h"
+#include "os.h"
 
 #include "log.h"
 LOG_DEF("SPECT");
 
 #define _LOG_DEBUG(...) // LOG_DEBUG(__VA_ARGS__)
 
-#define _SPECT_ERR_TIMEOUT 1
-#define _SPECT_ERR_IDLE    2
-#define _SPECT_ERR_RESULT  3
+#define _SPECT_ERR_TIMEOUT      1
+#define _SPECT_ERR_IDLE         2
+#define _SPECT_ERR_RESULT       3
+#define _SPECT_ERR_INIT_TIMEOUT 4
 
 #define _SPECT_REG_WRITE(offset,value) IO_WRITE_32(SPECT_REG_MAP_BASE_ADDR+(offset), value)
 #define _SPECT_REG_READ(offset)        IO_READ_32(SPECT_REG_MAP_BASE_ADDR+(offset))
@@ -32,32 +34,47 @@ LOG_DEF("SPECT");
  */
 #define _SPECT_COMMAND_TIMEOUT_MAX  (300 * 1000) // [us]
 
-static ts_bool _spect_done;
-static ts_bool _spect_error;
+/**
+ * @brief Define max timeout for the SPECT to reach the IDLE state after the soft reset.
+ * @note The reset itself settles within a few clock cycles, so this is a generous
+ *       upper bound. Keep it <= 1000 us, otherwise os_wait_for() switches to
+ *       sys_cpu_sleep() polling with up to 1 ms granularity.
+ */
+#define _SPECT_RESET_TIMEOUT_US_MAX    (1000) // [us]
+
+static volatile ts_bool _spect_done;
+static volatile ts_bool _spect_error;
+
+static TS_CHECK_RETVAL ts_bool _condition_spect_idle(void)
+{
+    return ((_SPECT_REG_READ(SPECT_STATUS_ADDR) & SPECT_STATUS_IDLE_MASK) ? TS_TRUE : TS_FALSE);
+}
 
 ts_bool spect_init(void)
 {
-    u32 i;
-
     _spect_done = TS_FALSE;
     _spect_error = TS_FALSE;
  
     spect_wakeup();
     spect_reset();
-
-    // clear SPECT RAM
-    for (i=0; i<SPECT_RAM_IN_SIZE; i+=sizeof(u32))
+    
+    // wait for IDLE
+    if (os_wait_for(_condition_spect_idle, _SPECT_RESET_TIMEOUT_US_MAX) != TS_TRUE)
     {
-        spect_write_dram_in_u32(i, 0);
+        LOG_ERROR_NUM(_SPECT_ERR_INIT_TIMEOUT);
+        _LOG_DEBUG("ST: %x", _SPECT_REG_READ(SPECT_STATUS_ADDR));
+        return TS_FALSE;
     }
 
     // enable interrupts
     _SPECT_REG_WRITE(SPECT_INT_ENA_ADDR, SPECT_INT_ENA_INT_DONE_EN_MASK | SPECT_INT_ENA_INT_ERR_EN_MASK);
-    
-    if (_SPECT_REG_READ(SPECT_STATUS_ADDR) != SPECT_STATUS_IDLE_MASK)
+
+    // clear SPECT RAM
+    for (u32 i=0; i<SPECT_RAM_IN_SIZE; i+=sizeof(u32))
     {
-        return TS_FALSE;
+        spect_write_dram_in_u32(i, 0);
     }
+
     return TS_TRUE;
 }
 
@@ -166,7 +183,7 @@ void spect_write_fw(u32 offset, const u32 *data, size_t len)
     }
 }
 
-static ts_bool _condition_spect_done(void)
+static TS_CHECK_RETVAL ts_bool _condition_spect_done(void)
 {
     if (_spect_done == TS_TRUE)
     {
@@ -191,15 +208,13 @@ ts_bool spect_wait_op_done(void)
 }
 
 ts_bool spect_wait_done(void)
-{   
-    spect_result_code_t result;
-
+{
     if (spect_wait_op_done() != TS_TRUE)
     {
         return TS_FALSE;
     }
 
-    result = spect_result_code();
+    spect_result_code_t result = spect_result_code();
 
     _LOG_DEBUG("RES: %x", spect_read_dram_out_u32(SPECT_OFFSET_RES_WORD));
     
@@ -209,7 +224,8 @@ ts_bool spect_wait_done(void)
         _spect_error = TS_TRUE;
         return TS_FALSE;
     }
-    else if (_spect_done != TS_TRUE)
+
+    if (_spect_done != TS_TRUE)
     {
         LOG_ERROR_NUM(_SPECT_ERR_IDLE);
     }

@@ -49,27 +49,21 @@ void sha256_final(sha256_t *ctx, u8 *hash)
     //  1) add byte 0x80 (PADDING_CHARACTER)
     //  2) fill by 0x00 up to CHUNK_SIZE - 8
     //  3) rest 8 byte is length in bits (whole message size)
-    
-    size_t l;
-    u8 *pbuf; 
-    u32 bits;
-    ts_bool init;
-    
     OS_SANITY_NULL(ctx);
     OS_SANITY_NULL(hash);
 
-    l = ctx->buf_length;
-    pbuf = ctx->buf;
+    size_t l = ctx->buf_length;
     OS_ASSERT(l < SHA256_CHUNK_SIZE);
 
-    init = (ctx->bit_length == 0) ? TS_TRUE : TS_FALSE; // may be only one chunk
+    ts_bool init = (ctx->bit_length == 0) ? TS_TRUE : TS_FALSE; // may be only one chunk
 
     // Clear rest of buffer
+    u8 *pbuf = ctx->buf;
     memset(pbuf + l, 0, SHA256_CHUNK_SIZE-l);
 
     // Update length by last incomplete chunk
     ctx->bit_length += (l << 3);
-    bits = ctx->bit_length;
+    u32 bits = ctx->bit_length;
 
     // Add the padding character
     pbuf[l] = SHA256_PADDING_CHARACTER;

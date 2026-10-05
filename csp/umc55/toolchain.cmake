@@ -25,7 +25,9 @@ set(CMAKE_RANLIB                "${RISC_V_TOOLCHAIN_PATH}/riscv32-unknown-elf-gc
 set(CMAKE_SIZE                  "${RISC_V_TOOLCHAIN_PATH}/riscv32-unknown-elf-size"   )
 set(CMAKE_STRIP                 "${RISC_V_TOOLCHAIN_PATH}/riscv32-unknown-elf-strip"  )
 
-set ( CMAKE_C_FLAGS "-march=${CMAKE_SYSTEM_PROCESSOR} -mabi=ilp32 -fno-builtin -nostartfiles" )
+# Packed L2/L3 protocol structs intentionally overlay byte buffers.
+# Disable strict-aliasing assumptions for these zero-copy overlays.
+set ( CMAKE_C_FLAGS "-march=${CMAKE_SYSTEM_PROCESSOR} -mabi=ilp32 -fno-builtin -fno-strict-aliasing -nostartfiles" )
 
 set ( CMAKE_C_FLAGS_RELEASE_INIT "" )
 set ( CMAKE_C_FLAGS_DEBUG_INIT "" )

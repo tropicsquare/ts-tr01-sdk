@@ -12,6 +12,7 @@
 #include <serial_subsystem_regs.h>
 
 #include "os.h"
+#include "spi.h"
 
 #define _SOC_CTRL_REG_WRITE(offset, value) IO_WRITE_32(SOCCTRL_REG_MAP_BASE_ADDR+(offset), value)
 #define _SOC_CTRL_REG_PTR(offset) PTR32_T(SOCCTRL_REG_MAP_BASE_ADDR + (offset))
@@ -97,12 +98,30 @@ void soc_ctrl_sleep_prepare(void)
 
 void soc_ctrl_sleep_enter(void)
 {
+    // Never stop the oscillator while a SPI transfer is in progress (STATUS[CSN]=0).
+    //
+    // spi_set_ready() sets SS STATUS[NREQN] and arms the SS to clear its wake-up line
+    // sck_reqq_nreq, but the SS applies that clear only while CSN is high. Stopping the
+    // oscillator with the clear still armed is fatal: the next request restarts the
+    // oscillator for a few cycles, the armed clear is applied in them and switches it off
+    // again, and the register that then holds sck_reqq_nreq in reset is clocked by clk_sys,
+    // so it stays asserted and no later request can raise the wake-up line. The chip is
+    // dead until an external reset - the CPU cannot issue GRST, it has no clock.
+    //
+    // The trap loop below is no protection: STATUS[NREQN] was just set by us and reads 1.
+    // Reading STATUS[CSN]=1 does prove the clear has already been applied.
+    // (ETR01FW-265, see sck_reqq_nreq in ss_req_queue.sv)
+    if (spi_idle() != TS_TRUE)
+    {
+        return; // transfer in progress - do not sleep, main loop retries next pass
+    }
+
     // Going to sleep by disabling OSC 
     _SOC_CTRL_REG_PTR(SOC_CTRL_CLK_CFG_ADDR) &= ~SOC_CTRL_CLK_CFG_OSCEN_MASK;
-
-    // Trap loop (System will have a few more clock cycles to live)
     while (PTR32_T(SS_REG_MAP_BASE_ADDR + SS_STATUS_ADDR) & SS_STATUS_NREQN_MASK)
-        ;
+    {
+        // Trap loop (System will have a few more clock cycles to live)
+    }
 }
 
 void soc_ctrl_sleep_leave(void)

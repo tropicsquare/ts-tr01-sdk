@@ -11,14 +11,14 @@
 #include "cpu.h"
 #include "irq_ctrl.h"
 #include "io_ops.h"
+#include "util.h"
 
 #include "soc_ctrl.h"
 
-ts_bool sys_init(void)
+void sys_init(void)
 {
     irq_periph_init();
     soc_ctrl_init();
-    return (TS_TRUE);
 }
 
 void sys_cpu_sleep(void)
@@ -28,7 +28,7 @@ void sys_cpu_sleep(void)
 
 void sys_copy_regs_to_mem(u8 *dest, u32 addr, size_t size)
 {
-    u32 tmp;
+    u32 tmp = 0;
 
     if (size == 0)
     {
@@ -50,11 +50,12 @@ void sys_copy_regs_to_mem(u8 *dest, u32 addr, size_t size)
         tmp = IO_READ_32(addr);
         memcpy(dest, &tmp, size);
     }
+    memerase_safe(&tmp, sizeof(tmp)); // clear potentially secret value from stack
 }
 
 void sys_copy_mem_to_regs(u32 addr, const u8 *src, size_t size)
 {
-    u32 tmp;
+    u32 tmp = 0;
 
     if (size == 0)
     {
@@ -78,5 +79,6 @@ void sys_copy_mem_to_regs(u32 addr, const u8 *src, size_t size)
         memcpy(&tmp, src, size);
         IO_WRITE_32(addr, tmp);
     }
+    memerase_safe(&tmp, sizeof(tmp)); // clear potentially secret value from stack
 }
 

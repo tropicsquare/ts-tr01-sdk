@@ -37,7 +37,7 @@ void puf_suspend(void);
  * @param[in] challenge The challenge word.
  * @param[out] out Destination for data reading.
  */
-ts_bool puf_read_value(u32 out[PUF_DATA_SIZE32], u32 challenge);
+ts_bool puf_read_value(u32 out[PUF_DATA_SIZE32], u32 challenge) TS_CHECK_RETVAL;
 
 /**
  * @brief Set the reliable bit mask for PUF HW.

@@ -26,7 +26,7 @@ static ascii _stream_buf[DEBUG_BUFFER_SIZE];
 static u32   _stream_buf_wr = 0;
 static u32   _stream_buf_rd = 0;
 
-static inline u32 _pinc(u32 ptr)
+static inline TS_CHECK_RETVAL u32 _pinc(u32 ptr)
 {   // buffer pointer loop increment
     ptr++;
     if (ptr >= DEBUG_BUFFER_SIZE)

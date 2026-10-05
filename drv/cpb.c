@@ -140,11 +140,10 @@ void cpb_set_error_code(u8 value)
     _CPB_REG_WRITE(CPB_CODES_ADDR, (value << CPB_CODES_UNAUTHORIZED_POS));
 }
 
-ts_bool cpb_read_data(u8 *dest, size_t offset, size_t len)
+void cpb_read_data(u8 *dest, size_t offset, size_t len)
 {
     OS_ASSERT(len+offset <= CPB_COMMAND_BUFFER_SIZE);
     _copy_regs_to_mem(dest, CPB_OFFSET_COMMAND_BUFFER + offset, len);
-    return TS_TRUE;
 }
 
 void cpb_write_data(u8 *src, size_t offset, size_t len)

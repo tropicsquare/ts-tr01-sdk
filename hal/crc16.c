@@ -11,13 +11,10 @@
 
 u16 crc16_byte(u8 data, u16 crc)
 { 
-    u16 current_byte;
-    int i;
-
-    current_byte = data;
+    u16 current_byte = data;
+    int i = 8;
 
     crc ^= current_byte << 8;
-    i = 8;
     do
     {
         if (crc & 0x8000) {

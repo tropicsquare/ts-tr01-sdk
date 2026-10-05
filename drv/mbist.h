@@ -110,17 +110,18 @@ typedef struct {
     u32             retention_2;
 } mbist_config_t;
 
-
-#define MBIST_RES_OK 0
-#define MBIST_RES_FAIL 0xFFFFFFFF
-
 /**
  * @brief Initializes the MBIST engine.
  *
- * Sets up retention timing and patterns. If a test is already in progress,
- * the engine is reset.
+ * Resets the engine, sets up the retention timing and the patterns and enables
+ * the DONE interrupt, which the driver needs to detect the end of a test.
+ *
+ * Has to be called before mbist_exec_test(). mbist_erase() enables the DONE
+ * interrupt itself, so it works without this call.
  *
  * @param config Pointer to the MBIST configuration structure.
+ * @note The engine is left woken up, ready for mbist_exec_test(). The caller
+ *       suspends it with mbist_suspend() once it is done with the tests.
  */
 void mbist_init(const mbist_config_t *config);
 
@@ -137,35 +138,52 @@ void mbist_suspend(void);
 void mbist_wakeup(void);
 
 /**
- * @brief Prepares the MBIST engine for test execution.
+ * @brief Executes an MBIST test on the specified memory channels.
  *
- * Configures the memory test type and the memory channels to be tested.
+ * Configures the test type, prepares the engine, starts the test and blocks
+ * until it finishes. The tested memories are taken over from the application for
+ * the duration of the test and released before the call returns.
+ *
+ * Only the MARCH tests and MEM_CLR are evaluated - the result is taken from the
+ * TEST_PROGRESS, TEST_RESULT and TEST_ERROR registers, which TSMBIST does not
+ * maintain for MBIST_TEST_CRC. A CRC test would need its outcome read from the
+ * CRC_RESULT register and compared by the caller.
  *
  * @param test_type The test pattern to apply (see @ref mbist_test_type_e).
- * @param chnls     Bitmask of memory channels to be tested.
- * @return MBIST_RES_OK if the configuration was successful.  
- *         MBIST_RES_FAIL if the TSMBIST engine is corrupted or unresponsive.
+ * @param chnls     Bitmask of memory channels to test.
+ * @return TS_TRUE if all the channels passed.  
+ *         TS_FALSE otherwise, including a test which did not finish in time and
+ *         a corrupted or unresponsive engine which could not be prepared.
+ * @note The engine has to be awake and set up by mbist_init(), and it is left
+ *       awake - the caller suspends it with mbist_suspend() when done with the
+ *       tests. Unlike mbist_erase(), this call manages no clock of its own.
+ * @note The engine is not reset before the test, so a test which is already in
+ *       progress is not aborted - the preparation fails instead. mbist_init()
+ *       brings the engine into a known state.
+ * @note The tested memories must not be in use by the application, as the engine
+ *       takes them over - testing a memory the CPU runs from hangs the CPU.
+ * @note MBIST_TEST_CRC is rejected with TS_FALSE, as its outcome cannot be
+ *       evaluated from the result registers.
  */
-u32 mbist_prepare_test(mbist_test_type_e test_type, mbist_chnls_t chnls);
-
-
-/**
- * @brief Executes the configured MBIST test.
- *
- * Starts the memory test on specified channels and blocks until completion.
- *
- * @param chnls Bitmask of memory channels to test.
- * @return MBIST_RES_OK if all tests passed.  
- *         Bitmask of failed channels otherwise.
- */
-u32 mbist_exec_test(mbist_chnls_t chnls);
+ts_bool mbist_exec_test(mbist_test_type_e test_type, mbist_chnls_t chnls) TS_CHECK_RETVAL;
 
 /**
  * @brief Executes a full MBIST erase cycle on the specified memory channels.
  * This function wraps wake-up, initialization, memory clear test, and suspension.
  * @param chnls Bitmask of memory channels to be erased.
+ * @return TS_TRUE if erase was successful.
+ *         TS_FALSE otherwise, including an erase which did not finish in time.
+ * @note The outcome is taken from the TEST_PROGRESS, TEST_RESULT and TEST_ERROR
+ *       registers, the same way as for mbist_exec_test().
+ * @note The engine is reset before the erase, which aborts any test in progress -
+ *       the erase of the sensitive data takes priority over anything running.
+ *       The setup passed to mbist_init() is kept.
+ * @note The engine is woken up by this call and suspended again on the end, so
+ *       it needs no mbist_init(). The MBIST clock is left disabled even when the
+ *       caller had it enabled, so an erase between mbist_init() and a test makes
+ *       the test fail - mbist_wakeup() is needed to continue testing.
  */
-void mbist_erase(mbist_chnls_t chnls);
+ts_bool mbist_erase(mbist_chnls_t chnls) TS_CHECK_RETVAL;
 
 #endif
 
